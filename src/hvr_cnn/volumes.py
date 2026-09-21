@@ -1,0 +1,90 @@
+"""Label maps, structure volumes and HVR for both models.
+
+The label map is chosen by model. The old container counted the `simple`
+labels whatever the model was, so `detailed` always produced zero volumes
+and crashed; here `detailed` HC and VC are the sums of their sub-labels.
+"""
+
+import math
+
+import numpy as np
+
+SIDES = ("L", "R")
+
+# model -> side -> structure -> label values summed into that structure
+LABELS: dict[str, dict[str, dict[str, tuple[int, ...]]]] = {
+    "simple": {
+        "L": {"HC": (11,), "VC": (12,)},
+        "R": {"HC": (21,), "VC": (22,)},
+    },
+    "detailed": {
+        "L": {"HC": (111, 112, 113), "VC": (121, 122, 123), "AMY": (130,)},
+        "R": {"HC": (211, 212, 213), "VC": (221, 222, 223), "AMY": (230,)},
+    },
+}
+
+# Sub-label names of the `detailed` model, reported as extra columns.
+# Order carried over from the previous implementation, not yet confirmed;
+# HC, VC and HVR are sums and do not depend on it.
+PARTS = ("head", "body", "tail")
+
+
+def expected_labels(model: str) -> frozenset[int]:
+    """All non-zero label values a segmentation of this model may contain."""
+    return frozenset(
+        v for side in _model(model).values() for vals in side.values() for v in vals
+    )
+
+
+def count_labels(seg: np.ndarray) -> dict[int, int]:
+    """Voxel count per non-zero label value."""
+    seg = np.asarray(seg)
+    rounded = np.rint(seg)
+    if not np.array_equal(seg, rounded):
+        raise ValueError("label volume contains non-integer values")
+    values, counts = np.unique(rounded.astype(np.int64), return_counts=True)
+    return {int(v): int(c) for v, c in zip(values, counts) if v != 0}
+
+
+def hvr(hc: float, vc: float) -> float:
+    """Hippocampal-to-ventricle ratio HC / (HC + VC); NaN when both are zero."""
+    if hc < 0 or vc < 0:
+        raise ValueError(f"negative volume: hc={hc}, vc={vc}")
+    total = hc + vc
+    return hc / total if total > 0 else math.nan
+
+
+def summarise(
+    counts: dict[int, int], model: str, voxel_volume_mm3: float = 1.0
+) -> dict[str, float]:
+    """One flat row of results for one segmentation.
+
+    Keys: `<side>_<structure>_vox`, `<side>_<structure>_mm3`, `<side>_HVR`,
+    and for `detailed` also `<side>_<structure>_<part>_vox`. Raises if the
+    segmentation holds a label that does not belong to the model; a missing
+    label counts as zero and shows up in `missing_labels`.
+    """
+    labels = _model(model)
+    unexpected = sorted(set(counts) - expected_labels(model))
+    if unexpected:
+        raise ValueError(f"labels {unexpected} do not belong to model '{model}'")
+
+    row: dict[str, float] = {}
+    for side in SIDES:
+        for structure, values in labels[side].items():
+            vox = sum(counts.get(v, 0) for v in values)
+            row[f"{side}_{structure}_vox"] = vox
+            row[f"{side}_{structure}_mm3"] = vox * voxel_volume_mm3
+            if len(values) == len(PARTS):
+                for part, v in zip(PARTS, values):
+                    row[f"{side}_{structure}_{part}_vox"] = counts.get(v, 0)
+        row[f"{side}_HVR"] = hvr(row[f"{side}_HC_vox"], row[f"{side}_VC_vox"])
+    row["missing_labels"] = len(expected_labels(model) - set(counts))
+    return row
+
+
+def _model(model: str) -> dict[str, dict[str, tuple[int, ...]]]:
+    try:
+        return LABELS[model]
+    except KeyError:
+        raise ValueError(f"unknown model '{model}', expected one of {sorted(LABELS)}") from None

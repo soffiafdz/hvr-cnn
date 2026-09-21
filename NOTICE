@@ -1,0 +1,36 @@
+hvr-cnn
+Copyright (C) Sofia Fernandez-Lozano
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License version 3 (see LICENSE).
+
+DRAFT - wording and licences below are to be confirmed before first release.
+
+Trained weights
+---------------
+src/hvr_cnn/assets/ensemble_hcvc.pth
+src/hvr_cnn/assets/ensemble_hcvc-ag.pth
+    Trained by Sofia Fernandez-Lozano.
+    Licence: TO CONFIRM (proposal: CC BY 4.0, or GPL-3.0 to match the code).
+    Note: the training data's terms may constrain this; check before release.
+
+Network architecture, training and inference code
+-------------------------------------------------
+src/model/ (ensemble.py, vae2.py, basic2.py, util.py)
+    Written by Vladimir S. Fonov (py_deep_seg). Included with the author's
+    permission. util.py is a subset of the original; function bodies are
+    unchanged.
+    TO CONFIRM: that the permission covers redistribution under GPL-3.0.
+
+MINC helper code
+----------------
+Any helper derived from ipl/minc_tools.py (nist_mni_pipelines, V. S. Fonov
+et al.) must be listed here with its upstream licence.
+
+Templates
+---------
+If the ICBM 152 2009c nonlinear symmetric template is bundled for
+preprocessing, reproduce its copyright notice here
+(Copyright (C) 1993-2009 Louis Collins, McConnell Brain Imaging Centre,
+Montreal Neurological Institute, McGill University) together with the
+permission text distributed with the template.

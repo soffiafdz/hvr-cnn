@@ -1,0 +1,36 @@
+# test fixtures are ADNI data (DICOM, reports, QC images, manifests that
+# carry participant IDs): everything under tests/<dir>/ is ignored except
+# unit-test code
+*.dcm
+/tests/*/*
+!/tests/unit/*
+
+# internal working notes (host paths, fixture IDs); public docs live in
+# README.md and docs/
+/docs/AUDIT.md
+/docs/DESIGN.md
+/docs/BASELINE.md
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.envrc
+.pytest_cache/
+
+# never commit imaging data or run outputs (ADNI DUA)
+*.mnc
+*.nii
+*.nii.gz
+*.xfm
+*.sif
+/work/
+/output/
+/data/
+/test_data/
+/reference/
+
+# bundled assets are the only images allowed in git
+!src/hvr_cnn/assets/*.mnc
