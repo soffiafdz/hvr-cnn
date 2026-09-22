@@ -60,10 +60,10 @@ def summarise(
 ) -> dict[str, float]:
     """One flat row of results for one segmentation.
 
-    Keys: `<side>_<structure>_vox`, `<side>_HVR`, for `detailed` also
-    `<side>_<structure>_<part>_vox`, and `<side>_<structure>_mm3` only when
-    the voxel volume is not 1 mm^3 (otherwise it would duplicate `_vox`).
-    Raises if the
+    Keys: `<side>_<structure>_mm3`, `<side>_HVR`, for `detailed` also
+    `<side>_<structure>_<part>_mm3`; the raw counts `*_vox` are added only
+    when the voxel volume is not 1 mm^3 (otherwise they would duplicate
+    `_mm3`). Raises if the
     segmentation holds a label that does not belong to the model; a missing
     label counts as zero and shows up in `missing_labels`.
     """
@@ -74,16 +74,19 @@ def summarise(
 
     row: dict[str, float] = {}
     unit_voxels = abs(voxel_volume_mm3 - 1.0) < 1e-9
+
+    def put(key, vox):
+        row[key + "_mm3"] = vox if unit_voxels else vox * voxel_volume_mm3
+        if not unit_voxels:
+            row[key + "_vox"] = vox
+
     for side in SIDES:
         for structure, values in labels[side].items():
-            vox = sum(counts.get(v, 0) for v in values)
-            row[f"{side}_{structure}_vox"] = vox
-            if not unit_voxels:
-                row[f"{side}_{structure}_mm3"] = vox * voxel_volume_mm3
+            put(f"{side}_{structure}", sum(counts.get(v, 0) for v in values))
             if len(values) == len(PARTS):
                 for part, v in zip(PARTS, values):
-                    row[f"{side}_{structure}_{part}_vox"] = counts.get(v, 0)
-        row[f"{side}_HVR"] = hvr(row[f"{side}_HC_vox"], row[f"{side}_VC_vox"])
+                    put(f"{side}_{structure}_{part}", counts.get(v, 0))
+        row[f"{side}_HVR"] = hvr(row[f"{side}_HC_mm3"], row[f"{side}_VC_mm3"])
     row["missing_labels"] = len(expected_labels(model) - set(counts))
     return row
 

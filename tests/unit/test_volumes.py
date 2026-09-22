@@ -46,8 +46,8 @@ def test_count_labels_rejects_non_integer():
 
 def test_simple_matches_old_code():
     row = volumes.summarise(BASELINE_SIMPLE, "simple")
-    assert (row["L_HC_vox"], row["L_VC_vox"]) == (4716, 1477)
-    assert (row["R_HC_vox"], row["R_VC_vox"]) == (4507, 1436)
+    assert (row["L_HC_mm3"], row["L_VC_mm3"]) == (4716, 1477)
+    assert (row["R_HC_mm3"], row["R_VC_mm3"]) == (4507, 1436)
     # values written by the old container for the same segmentation
     assert row["L_HVR"] == pytest.approx(0.7615049249152269, abs=1e-15)
     assert row["R_HVR"] == pytest.approx(0.7583711930001683, abs=1e-15)
@@ -57,13 +57,13 @@ def test_simple_matches_old_code():
 def test_detailed_sums_sublabels():
     # the case the old container crashed on
     row = volumes.summarise(BASELINE_DETAILED, "detailed")
-    assert (row["L_HC_vox"], row["L_VC_vox"], row["L_AMY_vox"]) == (4800, 1413, 1028)
-    assert (row["R_HC_vox"], row["R_VC_vox"], row["R_AMY_vox"]) == (4622, 1385, 1219)
+    assert (row["L_HC_mm3"], row["L_VC_mm3"], row["L_AMY_mm3"]) == (4800, 1413, 1028)
+    assert (row["R_HC_mm3"], row["R_VC_mm3"], row["R_AMY_mm3"]) == (4622, 1385, 1219)
     assert row["L_HVR"] == pytest.approx(4800 / 6213)
     assert row["R_HVR"] == pytest.approx(4622 / 6007)
     # x11 = tail (posterior), x13 = head (anterior, next to the amygdala)
-    assert (row["L_HC_tail_vox"], row["L_HC_body_vox"], row["L_HC_head_vox"]) == (772, 1775, 2253)
-    assert (row["L_VC_tail_vox"], row["L_VC_body_vox"], row["L_VC_head_vox"]) == (228, 577, 608)
+    assert (row["L_HC_tail_mm3"], row["L_HC_body_mm3"], row["L_HC_head_mm3"]) == (772, 1775, 2253)
+    assert (row["L_VC_tail_mm3"], row["L_VC_body_mm3"], row["L_VC_head_mm3"]) == (228, 577, 608)
     assert "L_AMY_head_vox" not in row
 
 
@@ -81,18 +81,19 @@ def test_wrong_model_is_an_error_not_zero_volumes():
         volumes.summarise(BASELINE_DETAILED, "simple")
 
 
-def test_mm3_only_when_it_differs_from_vox():
+def test_vox_only_when_it_differs_from_mm3():
     row = volumes.summarise(BASELINE_SIMPLE, "simple", voxel_volume_mm3=0.5)
     assert row["L_HC_mm3"] == 2358.0
     assert row["L_HC_vox"] == 4716
     unit = volumes.summarise(BASELINE_SIMPLE, "simple")
-    assert not any(k.endswith("_mm3") for k in unit)
+    assert not any(k.endswith("_vox") for k in unit)
+    assert unit["L_HC_mm3"] == 4716
     assert len(unit) == 7  # 2 sides x (HC, VC, HVR) + missing_labels
 
 
 def test_empty_segmentation_gives_nan_not_crash():
     row = volumes.summarise({}, "simple")
-    assert row["L_HC_vox"] == 0
+    assert row["L_HC_mm3"] == 0
     assert math.isnan(row["L_HVR"]) and math.isnan(row["R_HVR"])
     assert row["missing_labels"] == 4
 
