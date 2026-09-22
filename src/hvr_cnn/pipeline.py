@@ -70,6 +70,9 @@ def process_scan(scan, args, model, device, outdir, work_root):
     if seg_path.exists() and not args.overwrite:
         info.update(status="skipped", reason="output exists (use --overwrite)")
         counts = _count_labels(seg_path)
+        saved = next(scan_dir.glob("*_to-stx.xfm"), None) or preprocess.stx_xfm_for(scan.path)
+        if saved is not None:
+            info["scale_factor"] = preprocess.xfm_scale_factor(saved)
     else:
         work = Path(work_root) / scan.id
         work.mkdir(parents=True, exist_ok=True)
@@ -121,6 +124,13 @@ def process_scan(scan, args, model, device, outdir, work_root):
             info["scale_factor"] = preprocess.xfm_scale_factor(xfm)
             log.info("%s: preprocessed in %.0fs, stx scale factor %.3f", scan.id, info["preprocessing_seconds"],
                      info["scale_factor"])
+        if space == "stx":
+            sidecar = preprocess.stx_xfm_for(scan.path)
+            if sidecar is not None:
+                info["scale_factor"] = preprocess.xfm_scale_factor(sidecar)
+                info["scale_xfm"] = str(sidecar)
+                log.info("%s: native volumes from %s (scale factor %.4f)", scan.id, sidecar.name,
+                         info["scale_factor"])
         try:
             segment.check_stx_geometry(t1)
         except segment.GeometryError as exc:
@@ -191,7 +201,7 @@ def write_volumes(path, rows):
             out = {}
             for key, value in row.items():
                 if isinstance(value, float):
-                    out[key] = "" if math.isnan(value) else ("%.6g" % value if key.endswith("HVR") else "%g" % value)
+                    out[key] = "" if math.isnan(value) else "%.10g" % value
                 else:
                     out[key] = "" if value is None else value
             writer.writerow(out)

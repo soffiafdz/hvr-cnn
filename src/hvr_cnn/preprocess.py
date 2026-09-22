@@ -222,3 +222,15 @@ def assemblynet_to_stx(mni_t1, mni_mask, out_stx, work):
     minctools.run(["minccalc", "-q", "-clobber", "-expression", expression, mni_t1, out_stx, "-zero", "-short"])
     log.debug("assemblynet normalisation: %s", expression)
     return out_stx, expression
+
+
+def stx_xfm_for(stx_t1):
+    """The native->stx transform stored next to a stereotaxic T1 by the
+    longitudinal pipeline (`stx2_<id>_t1.mnc` -> `stx2_<id>_t1.xfm`), or None."""
+    stx_t1 = Path(stx_t1)
+    name = stx_t1.name
+    for ext in (".mnc.gz", ".mnc", ".nii.gz", ".nii"):
+        if name.endswith(ext):
+            candidate = stx_t1.with_name(name[: -len(ext)] + ".xfm")
+            return candidate if candidate.is_file() else None
+    return None

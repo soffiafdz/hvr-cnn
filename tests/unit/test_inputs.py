@@ -122,3 +122,13 @@ def test_assemblynet_pair_detection(tmp_path):
     assert preprocess.assemblynet_mask_for(t1) == mask
     assert preprocess.assemblynet_mask_for(touch(tmp_path / "native_t1_sub-01_T1w.nii.gz")) is None
     assert preprocess.assemblynet_mask_for(touch(tmp_path / "stx2_sub-01_t1.mnc")) is None
+
+
+def test_stx_sidecar_xfm(tmp_path):
+    from hvr_cnn import preprocess
+
+    t1 = touch(tmp_path / "stx2_s1_v1_t1.mnc")
+    assert preprocess.stx_xfm_for(t1) is None
+    xfm = touch(tmp_path / "stx2_s1_v1_t1.xfm")
+    assert preprocess.stx_xfm_for(t1) == xfm
+    assert preprocess.stx_xfm_for(touch(tmp_path / "other.nii.gz")) is None

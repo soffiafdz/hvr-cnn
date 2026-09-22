@@ -251,7 +251,9 @@ not depend on the scaling at all. For `native` input the table also has
 `<side>_<structure>_mm3_native`: the stereotaxic volume divided by the
 volume scaling of the registration (the product of its three scale
 factors), i.e. the volume in the subject's own head. `run.json` records
-the scale factor.
+the scale factor. Stereotaxic input gets the same columns when the
+longitudinal pipeline's transform is found next to it (`stx2_<id>_t1.mnc`
+-> `stx2_<id>_t1.xfm`).
 
 A segmentation containing a label that does not belong to the chosen model
 is an error for that scan, never a row of zeros.
@@ -266,7 +268,19 @@ use the model that the reference values you compare against were made with:
 | reference | model | volumes |
 |---|---|---|
 | Fernandez-Lozano et al., HBM 2025 (ADNI) | `simple` (default) | stereotaxic (`*_mm3`) |
-| UK Biobank normative models (in preparation) | `detailed`, HC and VC as the sum of head, body and tail | native space: stereotaxic volume divided by the scale factor of the registration (`*_mm3_native`); HVR is the same in both spaces |
+| UK Biobank normative models (in preparation) | `detailed`, HC and VC as the sum of head, body and tail | native space: stereotaxic volume divided by the scale factor of the registration (`*_mm3_native`); HVR is the same in both spaces. The UKBB images were preprocessed with the MNI longitudinal pipeline (`stx2`); for exact comparability run that pipeline and give hvr-cnn its `stx2_*_t1.mnc` (see below) |
+
+**Reproducing the UK Biobank processing exactly.** The UKBB norms were made
+from `stx2_*_t1.mnc` volumes of the MNI longitudinal pipeline
+([NIST-MNI/nist_mni_pipelines](https://github.com/NIST-MNI/nist_mni_pipelines),
+2024 version with SynthStrip-based bias correction and a subject-specific
+linear template across visits). hvr-cnn's `native` mode is a simpler,
+cross-sectional approximation of that preprocessing. For results on the
+same footing as the norms, run the longitudinal pipeline (it has its own
+container) and pass its `stx2_*_t1.mnc` files to `hvr-cnn run --model
+detailed`: when the matching `stx2_*_t1.xfm` sits next to each file,
+`*_mm3_native` is computed from it exactly as for the norms. On UKBB
+`stx2` volumes this reproduces the UKBB segmentations voxel for voxel.
 
 ### 6.4 `run.json`
 
