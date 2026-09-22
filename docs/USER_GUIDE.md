@@ -279,7 +279,7 @@ failure, the error. Keep it with your results: it is the provenance record.
 ```
 hvr-cnn run       segment scans; write labels, volumes, HVR and QC
 hvr-cnn selftest  check that this installation can run (needs no data)
-hvr-cnn check     verify the outputs of a run            (planned)
+hvr-cnn check     verify the outputs of a run
 hvr-cnn --version
 hvr-cnn <command> --help
 ```
@@ -307,6 +307,15 @@ hvr-cnn <command> --help
 
 Logs go to standard error with timestamps; there are no progress bars, so
 batch logs stay readable.
+
+### `hvr-cnn check OUTDIR [--reference DIR]`
+
+Verifies a finished run from inside the container: every scan marked `ok`
+has its label file, the label set is exactly the model's, HVR lies in
+(0, 1), and NIfTI outputs sit on their input's grid. With `--reference`,
+another run of the same model on the same scans, it also requires a Dice
+of at least 0.99 per label and volumes within 1 %. Exit status 0 when all
+checks pass, 1 otherwise; one line per check on standard error.
 
 ### Exit status
 

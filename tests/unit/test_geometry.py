@@ -6,7 +6,7 @@ minc2_simple = pytest.importorskip("minc2_simple")
 from hvr_cnn import segment  # noqa: E402
 
 
-def make_minc(path, lengths, starts, steps=(1.0, 1.0, 1.0), value=60.0):
+def make_minc(path, lengths, starts, steps=(1.0, 1.0, 1.0), value=60.0, data=None):
     from minc2_simple import minc2_file, minc2_dim
 
     dims = [minc2_dim(id=i + 1, length=n, start=s0, step=st, have_dir_cos=False, dir_cos=None)
@@ -15,8 +15,9 @@ def make_minc(path, lengths, starts, steps=(1.0, 1.0, 1.0), value=60.0):
     f.define(dims, minc2_file.MINC2_FLOAT, minc2_file.MINC2_FLOAT)
     f.create(str(path))
     f.setup_standard_order()
-    data = np.full((lengths[2], lengths[1], lengths[0]), value, dtype=np.float32)
-    f.save_complete_volume(data)
+    if data is None:
+        data = np.full((lengths[2], lengths[1], lengths[0]), value, dtype=np.float32)
+    f.save_complete_volume(np.ascontiguousarray(data, dtype=np.float32))
     f.close()
     return path
 

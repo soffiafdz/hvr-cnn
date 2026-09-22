@@ -205,6 +205,11 @@ def main(argv=None):
 
         return EXIT_SCAN_FAILED if pipeline.run(args, scans) else EXIT_OK
 
+    if args.command == "check":
+        from . import check
+
+        return EXIT_SCAN_FAILED if check.main(args.outdir, args.reference) else EXIT_OK
+
     log.error("'%s' is not available in this pre-release (%s)", args.command, __version__)
     return EXIT_UNAVAILABLE
 
