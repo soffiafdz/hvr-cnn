@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hvr-cnn"
+description = "Hippocampus / temporal-horn segmentation and hippocampal-to-ventricle ratio"
+license = { text = "GPL-3.0-only" }
+authors = [{ name = "Sofia Fernandez-Lozano" }]
+requires-python = ">=3.10"
+dynamic = ["version"]
+# Runtime dependencies (torch, numpy, nibabel, minc2-simple and the MINC
+# command-line tools) come from container/conda-linux-64.lock; the package is
+# installed with `pip install --no-deps .`, so nothing is listed here.
+dependencies = []
+
+[project.scripts]
+hvr-cnn = "hvr_cnn.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "hvr_cnn.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+# `model` must stay a top-level package: the weights are full-object pickles
+include = ["hvr_cnn*", "model*"]
+
+[tool.setuptools.package-data]
+"hvr_cnn" = ["assets/*.pth", "assets/*.mnc", "assets/labels.map"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+pythonpath = ["src"]
