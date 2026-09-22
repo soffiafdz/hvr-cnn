@@ -99,14 +99,17 @@ def check_run(outdir, reference=None):
             except (KeyError, ValueError):
                 h = math.nan
             yield 0.0 < h < 1.0, "%s: %s_HVR = %s" % (sid, side, row.get("%s_HVR" % side, "missing"))
-        if str(label_path).endswith((".nii", ".nii.gz")):
+        # the output that must sit on the input's grid: the native-space labels for
+        # native input, the (only) label file otherwise
+        on_input_grid = next((Path(o) for o in scan["outputs"] if "space-native" in Path(o).name), label_path)
+        if str(on_input_grid).endswith((".nii", ".nii.gz")):
             inp = Path(scan["input"])
             if inp.is_file() and str(inp).endswith((".nii", ".nii.gz")):
                 import nibabel as nib
 
-                a, b = nib.load(str(inp)), nib.load(str(label_path))
+                a, b = nib.load(str(inp)), nib.load(str(on_input_grid))
                 same = a.shape == b.shape and np.allclose(a.affine, b.affine, atol=1e-3)
-                yield same, "%s: NIfTI output on the input grid" % sid + ("" if same else " - NO")
+                yield same, "%s: NIfTI output %s on the input grid" % (sid, on_input_grid.name) + ("" if same else " - NO")
             else:
                 yield True, "%s: input not reachable, grid check skipped" % sid
         if ref_rows is not None:

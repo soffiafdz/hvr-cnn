@@ -67,8 +67,23 @@ def nifti_to_minc(nii_path, mnc_path):
     from minc2_simple import minc2_dim, minc2_file
 
     img = nib.as_closest_canonical(_nifti_image(nii_path))
-    cos, steps, starts = _decompose(img.affine)
-    data = np.asarray(img.dataobj, dtype=np.float32)
+    return write_minc(np.asarray(img.dataobj, dtype=np.float32), img.affine, mnc_path)
+
+
+def write_minc(data, affine, mnc_path, decimals=None):
+    """Write `data` (x, y, z index order) with a RAS `affine` as a float MINC
+    volume in z, y, x storage order with positive steps. With `decimals`,
+    starts and steps are rounded and near-identity direction cosines snapped
+    to exact ones, so the same grid gives the same header whatever wrote the
+    source file (the registration is sensitive to that)."""
+    from minc2_simple import minc2_dim, minc2_file
+
+    cos, steps, starts = _decompose(affine)
+    if decimals is not None:
+        if np.allclose(cos, np.eye(3), atol=1e-6):
+            cos = np.eye(3)
+        starts = np.round(starts, decimals)
+        steps = np.round(steps, decimals + 2)
     dims = [
         minc2_dim(id=i + 1, length=int(data.shape[i]), start=float(starts[i]), step=float(steps[i]),
                   have_dir_cos=True, dir_cos=np.ascontiguousarray(cos[:, i], dtype=np.float64))
@@ -78,7 +93,7 @@ def nifti_to_minc(nii_path, mnc_path):
     out.define(dims, minc2_file.MINC2_FLOAT, minc2_file.MINC2_FLOAT)
     out.create(str(mnc_path))
     out.setup_standard_order()
-    out.save_complete_volume(np.ascontiguousarray(data.transpose(2, 1, 0)))
+    out.save_complete_volume(np.ascontiguousarray(np.asarray(data, dtype=np.float32).transpose(2, 1, 0)))
     out.close()
     return mnc_path
 

@@ -178,7 +178,7 @@ segmentation, so hvr-cnn checks rather than assumes.
 | `--input-space` | use it for | what hvr-cnn does |
 |---|---|---|
 | `stx` | output of a stereotaxic pipeline that matches the description above (e.g. `stx2_*_t1.mnc` of the MNI/BIC longitudinal pipeline) | verifies the geometry (1 mm, no rotation, field of view covers the medial temporal lobes), warns when the intensity range inside the medial temporal region is far from the training scale, segments |
-| `native` *(planned)* | a raw scan from the scanner / `dcm2niix` / BIDS | denoising (optional), bias-field correction, linear registration to the template, intensity normalisation, resampling; then segments. Labels are written in stereotaxic **and** native space |
+| `native` | a raw scan from the scanner / `dcm2niix` / BIDS | head mask, nine-parameter linear registration to the template (normalised mutual information, four stages), N4 bias-field correction, linear intensity normalisation to the template, resampling; optional denoising (`--denoise`); then segments. Labels are written in stereotaxic **and** native space, with the transform |
 | `assemblynet` *(planned)* | the `mni_t1_*.nii.gz` of an AssemblyNet run | re-normalises intensities to the template (AssemblyNet's scale differs), segments; no registration needed |
 | `auto` (default) | anything | decides from the geometry of each scan (`stx` when the voxel grid is the ICBM152 1 mm grid or a window of it, else `native`) and **logs the decision**; pass the explicit value if it guesses wrong |
 
@@ -187,8 +187,7 @@ head present.
 
 ## 6. Output
 
-Implemented for stereotaxic MINC and NIfTI input; native-space labels and
-the transform are *(planned)*. File names carry the model
+Implemented for stereotaxic and native MINC and NIfTI input. File names carry the model
 (`model-simple` / `model-detailed`), so both models can be run into the
 same OUTDIR.
 
@@ -200,7 +199,7 @@ OUTDIR/
     <id>_space-stx_model-simple_seg.mnc|.nii.gz     labels on the stereotaxic grid
     <id>_space-native_model-simple_seg.mnc|.nii.gz  labels on the grid of the input (native input only)
     <id>_model-simple_qc.jpg             unless --no-qc
-    <id>_to-stx.xfm                      native -> stereotaxic transform (native input only)
+    <id>_to-stx.xfm                      native -> stereotaxic linear transform, MINC xfm (native input only)
 ```
 
 NIfTI outputs carry exactly the affine, shape, axis order and qform/sform
@@ -248,9 +247,11 @@ each side `L` and `R`:
 the template scales every head to the template's size, so volumes measured
 in stereotaxic space are already corrected for head size by that scaling.
 This is what the paper used. HVR is a ratio of two such volumes and does
-not depend on the scaling at all. Native-space volumes in mm^3 (stereotaxic
-volume divided by the scaling of the transform) are *(planned)* for
-`native` input.
+not depend on the scaling at all. For `native` input the table also has
+`<side>_<structure>_mm3_native`: the stereotaxic volume divided by the
+volume scaling of the registration (the product of its three scale
+factors), i.e. the volume in the subject's own head. `run.json` records
+the scale factor.
 
 A segmentation containing a label that does not belong to the chosen model
 is an error for that scan, never a row of zeros.
@@ -265,7 +266,7 @@ use the model that the reference values you compare against were made with:
 | reference | model | volumes |
 |---|---|---|
 | Fernandez-Lozano et al., HBM 2025 (ADNI) | `simple` (default) | stereotaxic (`*_mm3`) |
-| UK Biobank normative models (in preparation) | `detailed`, HC and VC as the sum of head, body and tail | native space: stereotaxic volume divided by the scale factor of the registration (`*_mm3_native`, *planned*); HVR is the same in both spaces |
+| UK Biobank normative models (in preparation) | `detailed`, HC and VC as the sum of head, body and tail | native space: stereotaxic volume divided by the scale factor of the registration (`*_mm3_native`); HVR is the same in both spaces |
 
 ### 6.4 `run.json`
 
@@ -371,7 +372,8 @@ apptainer run -B "$SCRATCH" hvr-cnn_0.1.0.sif \
 ```
 
 Budget roughly one to two minutes per already-stereotaxic scan on 8 cores
-and 1 GB of memory; raw scans take longer because they are preprocessed.
+and 1 GB of memory; a raw scan takes about two minutes more for the
+preprocessing (registration and bias-field correction).
 
 ## 9. Quality control
 
@@ -424,7 +426,7 @@ answered with the equivalent new options instead of a cryptic error.
 | three CSV files, appended to on every run | one TSV per `OUTDIR`, written once |
 | `--model detailed` crashed when volumes were requested | fixed: HC and VC are summed over head, body and tail |
 | MINC only | MINC or NIfTI, output in the format of the input, on the input's grid |
-| input had to be preprocessed (`stx2`) | raw scans and AssemblyNet output accepted *(planned)* |
+| input had to be preprocessed (`stx2`) | raw scans accepted (AssemblyNet output *(planned)*) |
 | a missing input was a warning, exit status 0 | all inputs validated up front, exit status 2 |
 | `--clobber` | `--overwrite`; default is to skip finished scans |
 | ran as root, wrote inside the image by default | any user, read-only image, no network |
@@ -440,7 +442,9 @@ unchanged: same weights, same sampling, same label values.
   children, on other contrasts, or on post-surgical anatomy.
 - Native input is processed cross-sectionally. The paper used a
   longitudinal pipeline with a subject-specific template; visits of one
-  person processed here are registered independently.
+  person processed here are registered independently. On the test scan the
+  two agree with a Dice of about 0.93 for the hippocampus and 0.78 for the
+  temporal horn in native space, and HVR within 0.015.
 - Volumes are stereotaxic-space volumes (section 6.2). Native-space volumes need the registration transform (section 6.3).
 - CPU only for now.
 

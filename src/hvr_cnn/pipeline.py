@@ -20,7 +20,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__, io, qc, segment, volumes
+from . import __version__, io, minctools, preprocess, qc, segment, volumes
 from .inputs import image_format
 from .selftest import load_model
 
@@ -62,12 +62,13 @@ def process_scan(scan, args, model, device, outdir, work_root):
     scan_dir = Path(outdir) / scan.id
     in_fmt = image_format(scan.path)
     out_fmt = in_fmt if args.out_format == "auto" else args.out_format
-    if args.input_space not in ("auto", "stx"):
-        raise ScanError("--input-space %s is not supported yet in this pre-release" % args.input_space)
+    if args.input_space == "assemblynet":
+        raise ScanError("--input-space assemblynet is not supported yet in this pre-release")
+    ext = ".mnc" if out_fmt == "mnc" else ".nii.gz"
     stem = "%s_space-stx_model-%s_seg" % (scan.id, args.model)
-    seg_path = scan_dir / (stem + (".mnc" if out_fmt == "mnc" else ".nii.gz"))
+    seg_path = scan_dir / (stem + ext)
 
-    info = {"id": scan.id, "input": str(scan.path), "input_space": "stx"}
+    info = {"id": scan.id, "input": str(scan.path), "input_space": args.input_space}
     if seg_path.exists() and not args.overwrite:
         info.update(status="skipped", reason="output exists (use --overwrite)")
         counts = _count_labels(seg_path)
@@ -83,12 +84,25 @@ def process_scan(scan, args, model, device, outdir, work_root):
                 raise ScanError("cannot convert %s: %s" % (scan.path.name, exc)) from None
         else:
             t1 = scan.path
-        if args.input_space == "auto":
+        space = args.input_space
+        if space == "auto":
             space, reason = segment.decide_space(t1)
             log.info("%s: input space decided as %s (%s)", scan.id, space, reason)
-            if space != "stx":
-                raise ScanError("looks like a native (unregistered) scan: %s. Native input is not supported "
-                                "yet in this pre-release; if the scan is stereotaxic, pass --input-space stx" % reason)
+        info["input_space"] = space
+        native_t1, xfm = None, None
+        if space == "native":
+            native_t1 = t1
+            xfm = work / ("%s_to-stx.xfm" % scan.id)
+            t1 = work / ("%s_stx.mnc" % scan.id)
+            started_pre = time.time()
+            try:
+                preprocess.native_to_stx(native_t1, t1, xfm, work, do_denoise=args.denoise)
+            except preprocess.PreprocessError as exc:
+                raise ScanError(str(exc)) from None
+            info["preprocessing_seconds"] = round(time.time() - started_pre, 1)
+            info["scale_factor"] = preprocess.xfm_scale_factor(xfm)
+            log.info("%s: preprocessed in %.0fs, stx scale factor %.3f", scan.id, info["preprocessing_seconds"],
+                     info["scale_factor"])
         try:
             segment.check_stx_geometry(t1)
         except segment.GeometryError as exc:
@@ -104,8 +118,8 @@ def process_scan(scan, args, model, device, outdir, work_root):
         counts = _count_labels(labels_mnc)
         tmp_out = work / seg_path.name
         if out_fmt == "nii":
-            # on the input's own grid and axis order when the input was NIfTI, else RAS
-            io.minc_labels_to_nifti(labels_mnc, tmp_out, like=scan.path if in_fmt == "nii" else None,
+            # on the input's own grid and axis order when the input was a stereotaxic NIfTI, else RAS
+            io.minc_labels_to_nifti(labels_mnc, tmp_out, like=scan.path if (in_fmt == "nii" and native_t1 is None) else None,
                                     description="hvr-cnn %s %s labels" % (__version__, args.model))
         else:
             tmp_out = labels_mnc
@@ -115,13 +129,31 @@ def process_scan(scan, args, model, device, outdir, work_root):
             qc.qc_picture(t1, labels_mnc, args.model, work / qc_path.name, work, title)
             shutil.move(str(work / qc_path.name), str(qc_path))
             info["qc"] = str(qc_path)
+        if native_t1 is not None:
+            native_labels = work / ("%s_space-native_model-%s_seg.mnc" % (scan.id, args.model))
+            minctools.run(["itk_resample", labels_mnc, native_labels, "--clobber", "--labels", "--byte",
+                           "--like", native_t1, "--transform", xfm, "--invert_transform"])
+            native_out = scan_dir / (native_labels.stem + ext)
+            if out_fmt == "nii":
+                io.minc_labels_to_nifti(native_labels, work / native_out.name,
+                                        like=scan.path if in_fmt == "nii" else None,
+                                        description="hvr-cnn %s %s labels" % (__version__, args.model))
+                shutil.move(str(work / native_out.name), str(native_out))
+            else:
+                shutil.move(str(native_labels), str(native_out))
+            xfm_out = scan_dir / xfm.name
+            shutil.copyfile(str(xfm), str(xfm_out))
+            info["outputs"] = [str(seg_path), str(native_out), str(xfm_out)]
         shutil.move(str(tmp_out), str(seg_path))  # only complete outputs appear in OUTDIR
         info["status"] = "ok"
         if not args.keep_work:
             shutil.rmtree(work, ignore_errors=True)
     row = volumes.summarise(counts, args.model)
+    if info.get("scale_factor"):
+        for key in [k for k in row if k.endswith("_mm3")]:
+            row[key + "_native"] = row[key] / info["scale_factor"]
     info["seconds"] = round(time.time() - started, 1)
-    info["outputs"] = [str(seg_path)]
+    info.setdefault("outputs", [str(seg_path)])
     info["output_format"] = out_fmt
     if row["missing_labels"]:
         raise ScanError("segmentation incomplete: %d of %d expected labels absent (output kept for inspection: %s). "
