@@ -81,10 +81,13 @@ def test_wrong_model_is_an_error_not_zero_volumes():
         volumes.summarise(BASELINE_DETAILED, "simple")
 
 
-def test_mm3_uses_voxel_volume():
+def test_mm3_only_when_it_differs_from_vox():
     row = volumes.summarise(BASELINE_SIMPLE, "simple", voxel_volume_mm3=0.5)
     assert row["L_HC_mm3"] == 2358.0
     assert row["L_HC_vox"] == 4716
+    unit = volumes.summarise(BASELINE_SIMPLE, "simple")
+    assert not any(k.endswith("_mm3") for k in unit)
+    assert len(unit) == 7  # 2 sides x (HC, VC, HVR) + missing_labels
 
 
 def test_empty_segmentation_gives_nan_not_crash():

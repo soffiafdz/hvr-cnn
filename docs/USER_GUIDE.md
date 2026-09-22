@@ -233,10 +233,10 @@ each side `L` and `R`:
 
 | column | meaning |
 |---|---|
-| `<side>_HC_vox`, `<side>_VC_vox` | voxels on the 1 mm stereotaxic grid |
-| `<side>_HC_mm3`, `<side>_VC_mm3` | the same in mm^3 of stereotaxic space |
+| `<side>_HC_vox`, `<side>_VC_vox` | voxels on the 1 mm stereotaxic grid, i.e. mm^3 of stereotaxic space |
+| `<side>_HC_mm3`, `<side>_VC_mm3` | present only when the grid is not 1 mm (then `_vox` and `_mm3` differ) |
 | `<side>_HVR` | `HC / (HC + VC)`; empty when both are zero |
-| `<side>_AMY_vox`, `<side>_AMY_mm3` | amygdala (`detailed` only) |
+| `<side>_AMY_vox` | amygdala (`detailed` only) |
 | `<side>_HC_head_vox`, `..._body_vox`, `..._tail_vox`, same for `VC` | parts (`detailed` only) |
 | `missing_labels` | expected labels that are absent. Any value but 0 makes the scan `failed` (the label file is kept for inspection) |
 

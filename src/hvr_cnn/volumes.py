@@ -60,8 +60,10 @@ def summarise(
 ) -> dict[str, float]:
     """One flat row of results for one segmentation.
 
-    Keys: `<side>_<structure>_vox`, `<side>_<structure>_mm3`, `<side>_HVR`,
-    and for `detailed` also `<side>_<structure>_<part>_vox`. Raises if the
+    Keys: `<side>_<structure>_vox`, `<side>_HVR`, for `detailed` also
+    `<side>_<structure>_<part>_vox`, and `<side>_<structure>_mm3` only when
+    the voxel volume is not 1 mm^3 (otherwise it would duplicate `_vox`).
+    Raises if the
     segmentation holds a label that does not belong to the model; a missing
     label counts as zero and shows up in `missing_labels`.
     """
@@ -71,11 +73,13 @@ def summarise(
         raise ValueError(f"labels {unexpected} do not belong to model '{model}'")
 
     row: dict[str, float] = {}
+    unit_voxels = abs(voxel_volume_mm3 - 1.0) < 1e-9
     for side in SIDES:
         for structure, values in labels[side].items():
             vox = sum(counts.get(v, 0) for v in values)
             row[f"{side}_{structure}_vox"] = vox
-            row[f"{side}_{structure}_mm3"] = vox * voxel_volume_mm3
+            if not unit_voxels:
+                row[f"{side}_{structure}_mm3"] = vox * voxel_volume_mm3
             if len(values) == len(PARTS):
                 for part, v in zip(PARTS, values):
                     row[f"{side}_{structure}_{part}_vox"] = counts.get(v, 0)
