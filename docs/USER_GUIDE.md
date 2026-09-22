@@ -248,7 +248,19 @@ volume divided by the scaling of the transform) are *(planned)* for
 A segmentation containing a label that does not belong to the chosen model
 is an error for that scan, never a row of zeros.
 
-### 6.3 `run.json`
+### 6.3 Which model goes with which reference values
+
+The two models are trained separately and their volumes differ
+systematically (`detailed` gives a slightly larger hippocampus and a
+smaller temporal horn, hence a slightly higher HVR). Do not mix them, and
+use the model that the reference values you compare against were made with:
+
+| reference | model | volumes |
+|---|---|---|
+| Fernandez-Lozano et al., HBM 2025 (ADNI) | `simple` (default) | stereotaxic (`*_vox` / `*_mm3`) |
+| UK Biobank normative models (in preparation) | `detailed`, HC and VC as the sum of head, body and tail | native space: stereotaxic volume divided by the scale factor of the registration (`*_mm3_native`, *planned*); HVR is the same in both spaces |
+
+### 6.4 `run.json`
 
 Version of hvr-cnn and of PyTorch, image digest when known, device,
 threads, the full command line, and for every scan: status (`ok`,
@@ -408,7 +420,7 @@ unchanged: same weights, same sampling, same label values.
 - Native input is processed cross-sectionally. The paper used a
   longitudinal pipeline with a subject-specific template; visits of one
   person processed here are registered independently.
-- Volumes are stereotaxic-space volumes (section 6.2).
+- Volumes are stereotaxic-space volumes (section 6.2). Native-space volumes need the registration transform (section 6.3).
 - CPU only for now.
 
 ## 13. Citing, licence, contact
