@@ -38,7 +38,7 @@ to the `-ag` files (same md5).
 ## Label values in outputs
 
 - `simple`: 11 L-HC, 12 L-VC, 21 R-HC, 22 R-VC
-- `detailed`: 111/112/113 L-HC head/body/tail, 121/122/123 L-VC
-  head/body/tail, 130 L-amygdala; 211...230 same on the right.
-  (Sub-label order is carried over from the old code and marked there as
-  "TODO: double-check" - confirm before documenting publicly.)
+- `detailed`: 111/112/113 L-HC tail/body/head, 121/122/123 L-VC
+  tail/body/head, 130 L-amygdala; 211...230 same on the right. Order
+  verified from the anterior-posterior position of each label (x13 is
+  adjacent to the amygdala); the old code had head and tail swapped.

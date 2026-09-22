@@ -61,7 +61,9 @@ def test_detailed_sums_sublabels():
     assert (row["R_HC_vox"], row["R_VC_vox"], row["R_AMY_vox"]) == (4622, 1385, 1219)
     assert row["L_HVR"] == pytest.approx(4800 / 6213)
     assert row["R_HVR"] == pytest.approx(4622 / 6007)
-    assert (row["L_HC_head_vox"], row["L_HC_body_vox"], row["L_HC_tail_vox"]) == (772, 1775, 2253)
+    # x11 = tail (posterior), x13 = head (anterior, next to the amygdala)
+    assert (row["L_HC_tail_vox"], row["L_HC_body_vox"], row["L_HC_head_vox"]) == (772, 1775, 2253)
+    assert (row["L_VC_tail_vox"], row["L_VC_body_vox"], row["L_VC_head_vox"]) == (228, 577, 608)
     assert "L_AMY_head_vox" not in row
 
 

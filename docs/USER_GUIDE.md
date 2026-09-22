@@ -216,8 +216,8 @@ to, so they overlay the input in any viewer.
 
 | value (left / right) | structure |
 |---|---|
-| 111, 112, 113 / 211, 212, 213 | hippocampus head, body, tail |
-| 121, 122, 123 / 221, 222, 223 | temporal-horn CSF head, body, tail |
+| 111, 112, 113 / 211, 212, 213 | hippocampus tail, body, head |
+| 121, 122, 123 / 221, 222, 223 | temporal-horn CSF tail, body, head |
 | 130 / 230 | amygdala |
 
 Left and right are anatomical (the subject's left).
@@ -409,9 +409,6 @@ unchanged: same weights, same sampling, same label values.
   longitudinal pipeline with a subject-specific template; visits of one
   person processed here are registered independently.
 - Volumes are stereotaxic-space volumes (section 6.2).
-- The head / body / tail subdivision of the `detailed` model follows the
-  label order of the training library and has not been re-verified for
-  this release; HC, VC and HVR do not depend on it.
 - CPU only for now.
 
 ## 13. Citing, licence, contact

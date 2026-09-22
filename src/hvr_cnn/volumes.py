@@ -23,10 +23,11 @@ LABELS: dict[str, dict[str, dict[str, tuple[int, ...]]]] = {
     },
 }
 
-# Sub-label names of the `detailed` model, reported as extra columns.
-# Order carried over from the previous implementation, not yet confirmed;
-# HC, VC and HVR are sums and do not depend on it.
-PARTS = ("head", "body", "tail")
+# Sub-label names of the `detailed` model, in label order x11, x12, x13,
+# reported as extra columns. Verified on a segmentation: x13 is the anterior
+# part next to the amygdala (head), x11 the posterior, superior part (tail).
+# The previous implementation had these two swapped.
+PARTS = ("tail", "body", "head")
 
 
 def expected_labels(model: str) -> frozenset[int]:
