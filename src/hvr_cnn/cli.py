@@ -201,6 +201,9 @@ def main(argv=None):
         if args.dry_run:
             log.info("dry run: nothing was processed")
             return EXIT_OK
+        from . import pipeline
+
+        return EXIT_SCAN_FAILED if pipeline.run(args, scans) else EXIT_OK
 
     log.error("'%s' is not available in this pre-release (%s)", args.command, __version__)
     return EXIT_UNAVAILABLE

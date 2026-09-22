@@ -177,25 +177,28 @@ segmentation, so hvr-cnn checks rather than assumes.
 
 | `--input-space` | use it for | what hvr-cnn does |
 |---|---|---|
-| `stx` | output of a stereotaxic pipeline that matches the description above (e.g. `stx2_*_t1.mnc` of the MNI/BIC longitudinal pipeline) | verifies the geometry (1 mm, no rotation, field of view covers the medial temporal lobes), warns on an unusual intensity range, segments |
+| `stx` | output of a stereotaxic pipeline that matches the description above (e.g. `stx2_*_t1.mnc` of the MNI/BIC longitudinal pipeline) | verifies the geometry (1 mm, no rotation, field of view covers the medial temporal lobes), warns when the intensity range inside the medial temporal region is far from the training scale, segments |
 | `native` *(planned)* | a raw scan from the scanner / `dcm2niix` / BIDS | denoising (optional), bias-field correction, linear registration to the template, intensity normalisation, resampling; then segments. Labels are written in stereotaxic **and** native space |
 | `assemblynet` *(planned)* | the `mni_t1_*.nii.gz` of an AssemblyNet run | re-normalises intensities to the template (AssemblyNet's scale differs), segments; no registration needed |
-| `auto` (default) | anything | decides from the geometry and file name of each scan and **logs the decision**; pass the explicit value if it guesses wrong |
+| `auto` (default) | anything | decides from the geometry of each scan (`stx` when the voxel grid is the ICBM152 1 mm grid or a window of it, else `native`) and **logs the decision**; pass the explicit value if it guesses wrong |
 
 Skull-stripped images are not supported: the network was trained with the
 head present.
 
 ## 6. Output
 
-*(planned; the volume and HVR definitions below are final and implemented)*
+Implemented for stereotaxic MINC input; NIfTI, native-space labels, the
+QC picture and the transform are *(planned)*. File names carry the model
+(`model-simple` / `model-detailed`), so both models can be run into the
+same OUTDIR.
 
 ```
 OUTDIR/
   volumes.tsv                      one row per scan
   run.json                         provenance and per-scan status
   <id>/
-    <id>_space-stx_seg.mnc|.nii.gz       labels on the stereotaxic grid
-    <id>_space-native_seg.mnc|.nii.gz    labels on the grid of the input (native input only)
+    <id>_space-stx_model-simple_seg.mnc|.nii.gz     labels on the stereotaxic grid
+    <id>_space-native_model-simple_seg.mnc|.nii.gz  labels on the grid of the input (native input only)
     <id>_qc.jpg                          unless --no-qc
     <id>_to-stx.xfm                      native -> stereotaxic transform (native input only)
 ```
@@ -235,7 +238,7 @@ each side `L` and `R`:
 | `<side>_HVR` | `HC / (HC + VC)`; empty when both are zero |
 | `<side>_AMY_vox`, `<side>_AMY_mm3` | amygdala (`detailed` only) |
 | `<side>_HC_head_vox`, `..._body_vox`, `..._tail_vox`, same for `VC` | parts (`detailed` only) |
-| `missing_labels` | expected labels that are absent; anything but 0 deserves a look at the QC picture |
+| `missing_labels` | expected labels that are absent. Any value but 0 makes the scan `failed` (the label file is kept for inspection) |
 
 **Stereotaxic volumes are head-size normalised.** Linear registration to
 the template scales every head to the template's size, so volumes measured
