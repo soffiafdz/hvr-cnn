@@ -15,9 +15,10 @@ hvr-cnn is distributed as a container image. It needs no MINC toolkit, no
 Python environment and no network access on the machine that runs it.
 
 > **Status: pre-release.** This repository is the rewrite of the container
-> published with the paper (`soffiafdz/hvr_cnn` 0.0.x on Docker Hub). The
-> command-line interface, input validation, volume/HVR computation and the
-> installation self-test are in place; the `run` command is being ported.
+> published with the paper (`soffiafdz/hvr_cnn` 0.0.x on Docker Hub). All
+> input modes, both models, volumes/HVR, QC pictures and the output checker
+> work and reproduce the published container's segmentations exactly on
+> stereotaxic input; the image itself has not been built and tested yet.
 > Until 0.1.0 is tagged, use the published 0.0.2 image for real work.
 
 ## What it does
@@ -28,7 +29,7 @@ Python environment and no network access on the machine that runs it.
 | Accepted spaces | already stereotaxic (ICBM152 2009c, intensity-normalised), raw / native, or AssemblyNet `mni_t1` output |
 | Models | `simple`: left/right hippocampus and temporal horn. `detailed`: head, body and tail of both, plus amygdala |
 | Output | label volumes in the format of the input, `volumes.tsv` (volumes and HVR per hemisphere), a QC picture per scan (on by default), `run.json` (provenance, per-scan status) |
-| Hardware | CPU; about one minute and 1 GB of memory per already-stereotaxic scan on 8 cores (raw scans take longer: they are preprocessed first) |
+| Hardware | CPU; about one minute and 1 GB of memory per already-stereotaxic scan on 8 cores, about three minutes for a raw scan (preprocessing included) |
 | Runtimes | Docker, Podman, Apptainer / Singularity (HPC) |
 
 ## Quick start

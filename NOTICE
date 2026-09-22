@@ -29,8 +29,19 @@ et al.) must be listed here with its upstream licence.
 
 Templates
 ---------
-If the ICBM 152 2009c nonlinear symmetric template is bundled for
-preprocessing, reproduce its copyright notice here
-(Copyright (C) 1993-2009 Louis Collins, McConnell Brain Imaging Centre,
-Montreal Neurological Institute, McGill University) together with the
-permission text distributed with the template.
+src/hvr_cnn/assets/mni_icbm152_t1_tal_nlin_sym_09c.mnc
+src/hvr_cnn/assets/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc
+    ICBM 152 nonlinear symmetric template, version 2009c (T1-weighted
+    average and brain mask), used as the registration target and intensity
+    reference for native-space input.
+    Copyright (C) 1993-2009 Louis Collins, McConnell Brain Imaging Centre,
+    Montreal Neurological Institute, McGill University.
+    Permission to use, copy, modify, and distribute this software and its
+    documentation for any purpose and without fee is hereby granted,
+    provided that the above copyright notice appear in all copies. The
+    authors and McGill University make no representations about the
+    suitability of this software for any purpose. It is provided "as is"
+    without express or implied warranty. The authors are not responsible
+    for any data/information/dataset-related claim.
+    TO CONFIRM with the copyright holder before release; the files' history
+    and ident header attributes are stripped before bundling.
