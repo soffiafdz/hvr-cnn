@@ -20,7 +20,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__, io, segment, volumes
+from . import __version__, io, qc, segment, volumes
 from .inputs import image_format
 from .selftest import load_model
 
@@ -109,6 +109,12 @@ def process_scan(scan, args, model, device, outdir, work_root):
                                     description="hvr-cnn %s %s labels" % (__version__, args.model))
         else:
             tmp_out = labels_mnc
+        if args.qc:  # before the move: for MINC output tmp_out is labels_mnc itself
+            qc_path = scan_dir / ("%s_model-%s_qc.jpg" % (scan.id, args.model))
+            title = "%s | %s | hvr-cnn %s" % (scan.id, args.model, __version__)
+            qc.qc_picture(t1, labels_mnc, args.model, work / qc_path.name, work, title)
+            shutil.move(str(work / qc_path.name), str(qc_path))
+            info["qc"] = str(qc_path)
         shutil.move(str(tmp_out), str(seg_path))  # only complete outputs appear in OUTDIR
         info["status"] = "ok"
         if not args.keep_work:

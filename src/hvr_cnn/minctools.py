@@ -62,12 +62,21 @@ def inside_prefix(path):
     return real.startswith(os.path.realpath(prefix()) + os.sep)
 
 
+class ToolError(RuntimeError):
+    """An external tool failed; the message carries its command and stderr."""
+
+
 def run(cmd, **kwargs):
-    """Run a tool; raise CalledProcessError with its stderr on failure."""
+    """Run a tool; raise ToolError with the command and its stderr on failure."""
     cmd = [str(c) for c in cmd]
     log.debug("run: %s", " ".join(cmd))
-    return subprocess.run(
-        cmd, check=True, env=tool_env(), stdin=subprocess.DEVNULL,
+    result = subprocess.run(
+        cmd, env=tool_env(), stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
         **kwargs
     )
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout or "").strip().splitlines()[-5:]
+        raise ToolError("%s exited with status %d: %s | %s"
+                        % (cmd[0], result.returncode, " ".join(cmd), " / ".join(tail) or "no output"))
+    return result

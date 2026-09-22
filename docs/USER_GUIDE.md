@@ -187,8 +187,8 @@ head present.
 
 ## 6. Output
 
-Implemented for stereotaxic MINC and NIfTI input; native-space labels, the
-QC picture and the transform are *(planned)*. File names carry the model
+Implemented for stereotaxic MINC and NIfTI input; native-space labels and
+the transform are *(planned)*. File names carry the model
 (`model-simple` / `model-detailed`), so both models can be run into the
 same OUTDIR.
 
@@ -199,7 +199,7 @@ OUTDIR/
   <id>/
     <id>_space-stx_model-simple_seg.mnc|.nii.gz     labels on the stereotaxic grid
     <id>_space-native_model-simple_seg.mnc|.nii.gz  labels on the grid of the input (native input only)
-    <id>_qc.jpg                          unless --no-qc
+    <id>_model-simple_qc.jpg             unless --no-qc
     <id>_to-stx.xfm                      native -> stereotaxic transform (native input only)
 ```
 
@@ -366,9 +366,13 @@ and 1 GB of memory; raw scans take longer because they are preprocessed.
 
 ## 9. Quality control
 
-Always look at the QC pictures. Each scan gets one image with
-axial, sagittal (left and right) and coronal rows through the medial
-temporal lobe, labels overlaid on the T1.
+Always look at the QC pictures. Each scan gets one image (1414 x 830 JPEG)
+with four rows of seven slices through the medial temporal lobes, labels
+overlaid on the T1: axial (inferior to superior), sagittal through the left
+hippocampus, sagittal through the right, coronal (anterior to posterior).
+Colours, `simple`: cyan left hippocampus, yellow left temporal horn, magenta
+right hippocampus, white right temporal horn. `detailed`: one colour per
+part; the amygdala is the most anterior structure.
 
 Reject a scan when the labels are displaced from the hippocampus (failed
 registration or wrong `--input-space`), when the hippocampus is clearly
