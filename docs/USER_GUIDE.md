@@ -179,8 +179,8 @@ segmentation, so hvr-cnn checks rather than assumes.
 |---|---|---|
 | `stx` | output of a stereotaxic pipeline that matches the description above (e.g. `stx2_*_t1.mnc` of the MNI/BIC longitudinal pipeline) | verifies the geometry (1 mm, no rotation, field of view covers the medial temporal lobes), warns when the intensity range inside the medial temporal region is far from the training scale, segments |
 | `native` | a raw scan from the scanner / `dcm2niix` / BIDS | head mask, nine-parameter linear registration to the template (normalised mutual information, four stages), N4 bias-field correction, linear intensity normalisation to the template, resampling; optional denoising (`--denoise`); then segments. Labels are written in stereotaxic **and** native space, with the transform |
-| `assemblynet` *(planned)* | the `mni_t1_*.nii.gz` of an AssemblyNet run | re-normalises intensities to the template (AssemblyNet's scale differs), segments; no registration needed |
-| `auto` (default) | anything | decides from the geometry of each scan (`stx` when the voxel grid is the ICBM152 1 mm grid or a window of it, else `native`) and **logs the decision**; pass the explicit value if it guesses wrong |
+| `assemblynet` | the `mni_t1_*.nii.gz` of an AssemblyNet run, with its `mni_mask_*.nii.gz` in the same directory | rescales the intensities to the training scale (a linear fit to the template within the brain masks; AssemblyNet's own scale is about 2.5 x higher), segments on AssemblyNet's MNI grid, so the labels overlay AssemblyNet's own. No registration. Labels are not written back to native space |
+| `auto` (default) | anything | `assemblynet` when the file is an `mni_t1_*` with its `mni_mask_*` next to it; otherwise decides from the geometry (`stx` when the voxel grid is the ICBM152 1 mm grid or a window of it, else `native`); **logs the decision**; pass the explicit value if it guesses wrong |
 
 Skull-stripped images are not supported: the network was trained with the
 head present.
@@ -426,7 +426,7 @@ answered with the equivalent new options instead of a cryptic error.
 | three CSV files, appended to on every run | one TSV per `OUTDIR`, written once |
 | `--model detailed` crashed when volumes were requested | fixed: HC and VC are summed over head, body and tail |
 | MINC only | MINC or NIfTI, output in the format of the input, on the input's grid |
-| input had to be preprocessed (`stx2`) | raw scans accepted (AssemblyNet output *(planned)*) |
+| input had to be preprocessed (`stx2`) | raw scans and AssemblyNet output accepted |
 | a missing input was a warning, exit status 0 | all inputs validated up front, exit status 2 |
 | `--clobber` | `--overwrite`; default is to skip finished scans |
 | ran as root, wrote inside the image by default | any user, read-only image, no network |
@@ -445,6 +445,11 @@ unchanged: same weights, same sampling, same label values.
   person processed here are registered independently. On the test scan the
   two agree with a Dice of about 0.93 for the hippocampus and 0.78 for the
   temporal horn in native space, and HVR within 0.015.
+- AssemblyNet input on the same test scan: hippocampal volume within 1 % of
+  the pipeline's, temporal horn 11-14 % larger, HVR about 0.02 lower.
+  AssemblyNet's preprocessing (SANLM, its own N4 and normalisation) differs
+  from the training pipeline's; treat results from this mode as their own
+  series and do not mix them with `stx`/`native` results in one analysis.
 - Volumes are stereotaxic-space volumes (section 6.2). Native-space volumes need the registration transform (section 6.3).
 - CPU only for now.
 

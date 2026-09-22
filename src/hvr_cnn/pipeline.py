@@ -62,8 +62,6 @@ def process_scan(scan, args, model, device, outdir, work_root):
     scan_dir = Path(outdir) / scan.id
     in_fmt = image_format(scan.path)
     out_fmt = in_fmt if args.out_format == "auto" else args.out_format
-    if args.input_space == "assemblynet":
-        raise ScanError("--input-space assemblynet is not supported yet in this pre-release")
     ext = ".mnc" if out_fmt == "mnc" else ".nii.gz"
     stem = "%s_space-stx_model-%s_seg" % (scan.id, args.model)
     seg_path = scan_dir / (stem + ext)
@@ -85,11 +83,31 @@ def process_scan(scan, args, model, device, outdir, work_root):
         else:
             t1 = scan.path
         space = args.input_space
+        asm_mask = preprocess.assemblynet_mask_for(scan.path)
         if space == "auto":
-            space, reason = segment.decide_space(t1)
+            if asm_mask is not None:
+                space, reason = "assemblynet", "AssemblyNet mni_t1 with its mni_mask next to it"
+            else:
+                space, reason = segment.decide_space(t1)
             log.info("%s: input space decided as %s (%s)", scan.id, space, reason)
         info["input_space"] = space
         native_t1, xfm = None, None
+        if space == "assemblynet":
+            if asm_mask is None:
+                raise ScanError("--input-space assemblynet needs an AssemblyNet mni_t1_*.nii.gz with its "
+                                "mni_mask_* file in the same directory")
+            mask_mnc = work / ("%s_mni_mask.mnc" % scan.id)
+            if image_format(asm_mask) == "nii":
+                io.nifti_to_minc(asm_mask, mask_mnc)
+            else:
+                mask_mnc = asm_mask
+            normalised = work / ("%s_stx.mnc" % scan.id)
+            try:
+                _, expression = preprocess.assemblynet_to_stx(t1, mask_mnc, normalised, work)
+            except preprocess.PreprocessError as exc:
+                raise ScanError(str(exc)) from None
+            info["intensity_expression"] = expression
+            t1 = normalised
         if space == "native":
             native_t1 = t1
             xfm = work / ("%s_to-stx.xfm" % scan.id)

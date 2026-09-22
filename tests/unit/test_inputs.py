@@ -111,3 +111,14 @@ def test_csv_extension_checked_even_with_subject(tmp_path):
     table.write_text("input,subject\ns1.dcm,s1\n")
     with pytest.raises(InputError, match="unsupported file type"):
         inputs.from_csv(table)
+
+
+def test_assemblynet_pair_detection(tmp_path):
+    from hvr_cnn import preprocess
+
+    t1 = touch(tmp_path / "mni_t1_sub-01_T1w.nii.gz")
+    assert preprocess.assemblynet_mask_for(t1) is None  # no mask yet
+    mask = touch(tmp_path / "mni_mask_sub-01_T1w.nii.gz")
+    assert preprocess.assemblynet_mask_for(t1) == mask
+    assert preprocess.assemblynet_mask_for(touch(tmp_path / "native_t1_sub-01_T1w.nii.gz")) is None
+    assert preprocess.assemblynet_mask_for(touch(tmp_path / "stx2_sub-01_t1.mnc")) is None

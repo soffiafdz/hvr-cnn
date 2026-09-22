@@ -196,3 +196,29 @@ def xfm_scale_factor(xfm):
             sx, sy, sz = (float(v) for v in line.split()[1:4])
             return sx * sy * sz
     raise PreprocessError("cannot read scales from %s" % xfm)
+
+
+def assemblynet_mask_for(mni_t1):
+    """The `mni_mask_*` sibling of an AssemblyNet `mni_t1_*` file, or None."""
+    mni_t1 = Path(mni_t1)
+    if not mni_t1.name.startswith("mni_t1_"):
+        return None
+    mask = mni_t1.with_name("mni_mask_" + mni_t1.name[len("mni_t1_"):])
+    return mask if mask.is_file() else None
+
+
+def assemblynet_to_stx(mni_t1, mni_mask, out_stx, work):
+    """AssemblyNet `mni_t1` (already affine-registered to MNI, own intensity
+    scale) -> the training intensity scale, on AssemblyNet's grid: linear
+    `volume_pol` to the template within the brain masks. No registration."""
+    work = Path(work)
+    tpl_t1, tpl_mask = template_files()
+    mask = work / "asm_mask.mnc"
+    minctools.run(["mincreshape", "-q", "-clobber", "-byte", mni_mask, mask])
+    expfile = work / "asm_volpol.exp"
+    minctools.run(["volume_pol", mni_t1, tpl_t1, "--order", "1", "--expfile", expfile, "--noclamp", "--clob",
+                   "--source_mask", mask, "--target_mask", tpl_mask])
+    expression = open(str(expfile)).read().strip()
+    minctools.run(["minccalc", "-q", "-clobber", "-expression", expression, mni_t1, out_stx, "-zero", "-short"])
+    log.debug("assemblynet normalisation: %s", expression)
+    return out_stx, expression
