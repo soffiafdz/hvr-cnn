@@ -20,7 +20,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__, segment, volumes
+from . import __version__, io, segment, volumes
 from .inputs import image_format
 from .selftest import load_model
 
@@ -43,14 +43,16 @@ def _pick_device(requested):
     return requested
 
 
-def _count_labels_minc(path):
+def _count_labels(path):
+    """Voxel counts per label of a MINC or NIfTI label file."""
     import numpy as np
-    from minc2_simple import minc2_file
 
-    f = minc2_file(str(path))
-    f.setup_standard_order()
-    data = np.asarray(f.load_complete_volume("float64"))
-    f.close()
+    if str(path).endswith(".mnc"):
+        data, _ = io.read_minc(path)
+    else:
+        import nibabel as nib
+
+        data = np.asarray(nib.load(str(path)).dataobj)
     return volumes.count_labels(data)
 
 
@@ -58,47 +60,63 @@ def process_scan(scan, args, model, device, outdir, work_root):
     """Segment one scan. Returns (row for volumes.tsv, info for run.json)."""
     started = time.time()
     scan_dir = Path(outdir) / scan.id
-    fmt = image_format(scan.path)
-    if fmt != "mnc":
-        raise ScanError("NIfTI input is not supported yet in this pre-release (%s)" % scan.path.name)
+    in_fmt = image_format(scan.path)
+    out_fmt = in_fmt if args.out_format == "auto" else args.out_format
     if args.input_space not in ("auto", "stx"):
         raise ScanError("--input-space %s is not supported yet in this pre-release" % args.input_space)
-    if args.input_space == "auto":
-        space, reason = segment.decide_space(scan.path)
-        log.info("%s: input space decided as %s (%s)", scan.id, space, reason)
-        if space != "stx":
-            raise ScanError("looks like a native (unregistered) scan: %s. Native input is not supported "
-                            "yet in this pre-release; if the scan is stereotaxic, pass --input-space stx" % reason)
-    seg_path = scan_dir / ("%s_space-stx_model-%s_seg.mnc" % (scan.id, args.model))
+    stem = "%s_space-stx_model-%s_seg" % (scan.id, args.model)
+    seg_path = scan_dir / (stem + (".mnc" if out_fmt == "mnc" else ".nii.gz"))
 
     info = {"id": scan.id, "input": str(scan.path), "input_space": "stx"}
     if seg_path.exists() and not args.overwrite:
         info.update(status="skipped", reason="output exists (use --overwrite)")
-        counts = _count_labels_minc(seg_path)
+        counts = _count_labels(seg_path)
     else:
         work = Path(work_root) / scan.id
         work.mkdir(parents=True, exist_ok=True)
         scan_dir.mkdir(parents=True, exist_ok=True)
-        tmp_out = work / seg_path.name
+        if in_fmt == "nii":
+            t1 = work / (scan.id + "_input.mnc")
+            try:
+                io.nifti_to_minc(scan.path, t1)
+            except io.ConversionError as exc:
+                raise ScanError("cannot convert %s: %s" % (scan.path.name, exc)) from None
+        else:
+            t1 = scan.path
+        if args.input_space == "auto":
+            space, reason = segment.decide_space(t1)
+            log.info("%s: input space decided as %s (%s)", scan.id, space, reason)
+            if space != "stx":
+                raise ScanError("looks like a native (unregistered) scan: %s. Native input is not supported "
+                                "yet in this pre-release; if the scan is stereotaxic, pass --input-space stx" % reason)
         try:
-            segment.check_stx_geometry(scan.path)
+            segment.check_stx_geometry(t1)
         except segment.GeometryError as exc:
             raise ScanError(str(exc)) from None
-        p90 = segment.intensity_p90(scan.path)
+        p90 = segment.intensity_p90(t1)
         lo, hi = segment.INTENSITY_P90_RANGE
         if not lo <= p90 <= hi:
             info["warning"] = ("intensity p90 in the reference box is %.0f, expected %.0f-%.0f: the scan is "
                                "probably not intensity-normalised to the template" % (p90, lo, hi))
             log.warning("%s: %s", scan.id, info["warning"])
-        segment.segment_stx(scan.path, tmp_out, args.model, model, work, device)
+        labels_mnc = work / (stem + ".mnc")
+        segment.segment_stx(t1, labels_mnc, args.model, model, work, device)
+        counts = _count_labels(labels_mnc)
+        tmp_out = work / seg_path.name
+        if out_fmt == "nii":
+            # on the input's own grid and axis order when the input was NIfTI, else RAS
+            io.minc_labels_to_nifti(labels_mnc, tmp_out, like=scan.path if in_fmt == "nii" else None,
+                                    description="hvr-cnn %s %s labels" % (__version__, args.model))
+        else:
+            tmp_out = labels_mnc
         shutil.move(str(tmp_out), str(seg_path))  # only complete outputs appear in OUTDIR
-        counts = _count_labels_minc(seg_path)
         info["status"] = "ok"
         if not args.keep_work:
             shutil.rmtree(work, ignore_errors=True)
     row = volumes.summarise(counts, args.model)
     info["seconds"] = round(time.time() - started, 1)
     info["outputs"] = [str(seg_path)]
+    info["output_format"] = out_fmt
     if row["missing_labels"]:
         raise ScanError("segmentation incomplete: %d of %d expected labels absent (output kept for inspection: %s). "
                         "The input is probably not registered or not intensity-normalised to the template"

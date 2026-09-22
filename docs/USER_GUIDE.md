@@ -187,7 +187,7 @@ head present.
 
 ## 6. Output
 
-Implemented for stereotaxic MINC input; NIfTI, native-space labels, the
+Implemented for stereotaxic MINC and NIfTI input; native-space labels, the
 QC picture and the transform are *(planned)*. File names carry the model
 (`model-simple` / `model-detailed`), so both models can be run into the
 same OUTDIR.
@@ -203,8 +203,12 @@ OUTDIR/
     <id>_to-stx.xfm                      native -> stereotaxic transform (native input only)
 ```
 
-NIfTI outputs carry exactly the affine and shape of the grid they belong
-to, so they overlay the input in any viewer.
+NIfTI outputs carry exactly the affine, shape, axis order and qform/sform
+codes of the input they belong to, so they overlay the input in any viewer
+(verified: labels from a NIfTI input are voxel-identical to those from the
+same scan as MINC). When a NIfTI has both an sform and a qform, the sform is
+used, as in nibabel. Sheared voxel axes are rejected; oblique (rotated)
+grids are accepted and, being unregistered, are treated as native input.
 
 ### 6.1 Label values
 
@@ -233,11 +237,11 @@ each side `L` and `R`:
 
 | column | meaning |
 |---|---|
-| `<side>_HC_vox`, `<side>_VC_vox` | voxels on the 1 mm stereotaxic grid, i.e. mm^3 of stereotaxic space |
-| `<side>_HC_mm3`, `<side>_VC_mm3` | present only when the grid is not 1 mm (then `_vox` and `_mm3` differ) |
+| `<side>_HC_mm3`, `<side>_VC_mm3` | volume in mm^3 of stereotaxic space (on the 1 mm grid this equals the voxel count) |
+| `<side>_HC_vox`, `<side>_VC_vox` | raw voxel counts, present only when the grid is not 1 mm |
 | `<side>_HVR` | `HC / (HC + VC)`; empty when both are zero |
-| `<side>_AMY_vox` | amygdala (`detailed` only) |
-| `<side>_HC_head_vox`, `..._body_vox`, `..._tail_vox`, same for `VC` | parts (`detailed` only) |
+| `<side>_AMY_mm3` | amygdala (`detailed` only) |
+| `<side>_HC_head_mm3`, `..._body_mm3`, `..._tail_mm3`, same for `VC` | parts (`detailed` only) |
 | `missing_labels` | expected labels that are absent. Any value but 0 makes the scan `failed` (the label file is kept for inspection) |
 
 **Stereotaxic volumes are head-size normalised.** Linear registration to
@@ -260,7 +264,7 @@ use the model that the reference values you compare against were made with:
 
 | reference | model | volumes |
 |---|---|---|
-| Fernandez-Lozano et al., HBM 2025 (ADNI) | `simple` (default) | stereotaxic (`*_vox` / `*_mm3`) |
+| Fernandez-Lozano et al., HBM 2025 (ADNI) | `simple` (default) | stereotaxic (`*_mm3`) |
 | UK Biobank normative models (in preparation) | `detailed`, HC and VC as the sum of head, body and tail | native space: stereotaxic volume divided by the scale factor of the registration (`*_mm3_native`, *planned*); HVR is the same in both spaces |
 
 ### 6.4 `run.json`
@@ -382,6 +386,7 @@ left/right difference far outside that of the rest of your sample.
 | `this looks like a command line for hvr_cnn 0.0.x` | see section 11 |
 | `needs a header row with a column named 'input'` | the table has no header, or the path column has another name. 0.0.x accepted header-less tables; this version does not |
 | `unsupported file type` | convert DICOM / Analyze / MGZ to NIfTI or MINC first |
+| `sheared or non-orthogonal voxel axes` | the NIfTI affine has shear; re-export the scan (e.g. with dcm2niix) |
 | labels shifted or obviously wrong, exit status 0 | the scan was treated as `stx` but is not in ICBM152 2009c space or not intensity-normalised. Use `--input-space native` |
 | very slow on a shared node | pass `--threads` equal to the CPUs you were granted |
 | Apple Silicon: slow | the image is `linux/amd64` and is emulated |
@@ -405,7 +410,7 @@ answered with the equivalent new options instead of a cryptic error.
 | `--vols`, `--hc_vols`, `--vc_vols`, `--hvr_csv` and their `--*_path` | always on: one `OUTDIR/volumes.tsv` |
 | three CSV files, appended to on every run | one TSV per `OUTDIR`, written once |
 | `--model detailed` crashed when volumes were requested | fixed: HC and VC are summed over head, body and tail |
-| MINC only | MINC or NIfTI, output in the format of the input |
+| MINC only | MINC or NIfTI, output in the format of the input, on the input's grid |
 | input had to be preprocessed (`stx2`) | raw scans and AssemblyNet output accepted *(planned)* |
 | a missing input was a warning, exit status 0 | all inputs validated up front, exit status 2 |
 | `--clobber` | `--overwrite`; default is to skip finished scans |
