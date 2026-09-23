@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import sys
+import warnings
 
 from . import __version__
 from .inputs import InputError, from_csv, from_paths, image_format
@@ -164,6 +165,25 @@ def legacy_hint(argv):
     return "\n".join(lines)
 
 
+def _output_problem(outdir):
+    """Why OUTDIR cannot be used, or None. Checked before any scan is processed."""
+    path = os.path.abspath(outdir)
+    probe = path
+    while not os.path.exists(probe):  # nearest existing ancestor decides
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    if os.path.exists(path) and not os.path.isdir(path):
+        return "-o %s exists and is not a directory" % outdir
+    if not os.access(probe, os.W_OK | os.X_OK):
+        hint = (" (in a container: is the directory mounted, and does the container run as a user "
+                "allowed to write to it?)")
+        return "-o %s: no permission to %s %s%s" % (
+            outdir, "write in" if probe == path else "create it inside", probe, hint)
+    return None
+
+
 def _plan(args, scans):
     threads = args.threads or default_threads()
     log.info("%d scan(s) -> %s | model %s | input space %s | device %s | %d thread(s)",
@@ -183,6 +203,11 @@ def main(argv=None):
         parser.print_help(sys.stderr)
         return EXIT_USAGE
     args = parser.parse_args(argv)
+    # the legacy model code (src/model, kept unchanged for the pickled weights)
+    # decorates with torch.cuda.amp.autocast, which warns on every import
+    warnings.filterwarnings("ignore", category=FutureWarning, message=r".*torch\.cuda\.amp\.autocast.*")
+    warnings.filterwarnings("ignore", category=UserWarning,
+                            message=r"CUDA is not available or torch_xla is imported\. Disabling autocast\.")
     if args.command is None:
         parser.error("a command is required: run, selftest or check")
     logging.basicConfig(
@@ -201,6 +226,10 @@ def main(argv=None):
             scans = from_csv(args.csv) if args.csv else from_paths(args.input)
         except InputError as exc:
             log.error("%s", exc)
+            return EXIT_USAGE
+        problem = _output_problem(args.output)
+        if problem:
+            log.error("%s", problem)
             return EXIT_USAGE
         _plan(args, scans)
         if args.dry_run:

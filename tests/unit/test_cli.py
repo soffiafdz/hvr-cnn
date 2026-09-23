@@ -121,3 +121,24 @@ def test_tool_env_is_idempotent():
 def test_field_rejects_other_values():
     with pytest.raises(SystemExit):
         cli.main(["run", "-i", "a.mnc", "-o", "out", "--field", "7"])
+
+
+def test_unwritable_output_is_usage_error_not_traceback(tmp_path, caplog):
+    scan = tmp_path / "s.mnc"
+    scan.write_bytes(b"")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0o500)
+    try:
+        code = cli.main(["run", "-i", str(scan), "-o", str(locked / "out" / "deeper"), "--dry-run"])
+    finally:
+        locked.chmod(0o700)
+    assert code == cli.EXIT_USAGE
+    assert "no permission" in caplog.text
+
+
+def test_output_that_is_a_file_is_rejected(tmp_path, caplog):
+    scan = tmp_path / "s.mnc"
+    scan.write_bytes(b"")
+    code = cli.main(["run", "-i", str(scan), "-o", str(scan), "--dry-run"])
+    assert code == cli.EXIT_USAGE and "not a directory" in caplog.text
