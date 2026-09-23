@@ -45,6 +45,16 @@ def read_run(outdir):
     return run, rows
 
 
+def locate(path, run_dir, scan_id):
+    """An output recorded in run.json, or the same file inside `run_dir` when
+    the run directory was moved or copied to another machine."""
+    path = Path(path)
+    if path.is_file():
+        return path
+    moved = Path(run_dir) / scan_id / path.name
+    return moved if moved.is_file() else path
+
+
 def dice_per_label(a, b, labels):
     out = {}
     for lab in labels:
@@ -81,7 +91,7 @@ def check_run(outdir, reference=None):
             yield True, "%s: status %s (not checked)" % (sid, scan.get("status"))
             continue
         n_ok += 1
-        label_path = Path(scan["outputs"][0])
+        label_path = locate(scan["outputs"][0], outdir, sid)
         if not label_path.is_file():
             yield False, "%s: missing %s" % (sid, label_path)
             continue
@@ -101,7 +111,8 @@ def check_run(outdir, reference=None):
             yield 0.0 < h < 1.0, "%s: %s_HVR = %s" % (sid, side, row.get("%s_HVR" % side, "missing"))
         # the output that must sit on the input's grid: the native-space labels for
         # native input, the (only) label file otherwise
-        on_input_grid = next((Path(o) for o in scan["outputs"] if "space-native" in Path(o).name), label_path)
+        on_input_grid = next((locate(o, outdir, sid) for o in scan["outputs"] if "space-native" in Path(o).name),
+                             label_path)
         if str(on_input_grid).endswith((".nii", ".nii.gz")):
             inp = Path(scan["input"])
             if inp.is_file() and str(inp).endswith((".nii", ".nii.gz")):
@@ -117,7 +128,7 @@ def check_run(outdir, reference=None):
             if ref_scan is None or ref_scan.get("status") not in ("ok", "skipped"):
                 yield False, "%s: not in the reference run" % sid
                 continue
-            ref_data, _ = load_labels(ref_scan["outputs"][0])
+            ref_data, _ = load_labels(locate(ref_scan["outputs"][0], reference, sid))
             if ref_data.shape != data.shape:
                 yield False, "%s: reference grid %s differs from %s" % (sid, ref_data.shape, data.shape)
                 continue

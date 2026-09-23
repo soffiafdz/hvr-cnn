@@ -76,3 +76,11 @@ def test_reference_with_other_model_fails(tmp_path):
 
 def test_missing_run_json(tmp_path):
     assert any("cannot read" in m for m in failures(tmp_path))
+
+
+def test_moved_run_directory_still_checks(tmp_path):
+    import shutil
+    fake_run(tmp_path / "a")
+    fake_run(tmp_path / "b")
+    shutil.move(str(tmp_path / "b"), str(tmp_path / "b_moved"))  # run.json keeps the old paths
+    assert failures(tmp_path / "a", tmp_path / "b_moved") == []
