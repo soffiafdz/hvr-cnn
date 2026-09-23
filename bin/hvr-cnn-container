@@ -73,9 +73,13 @@ abspath() { # absolute, normalised path (no ".", "..", "//"), which need not exi
   done
   printf '%s\n' "${out:-/}"
 }
-ro_dirs=() rw_dirs=()
-add_ro() { ro_dirs+=("$(dirname "$(abspath "$1")")"); }
-add_rw() { local d; d=$(abspath "$1"); mkdir -p "$d"; rw_dirs+=("$d"); }
+ro_dirs=() rw_dirs=() missing=()
+add_ro() { # an input file: its directory is mounted read-only; it must exist
+  local f; f=$(abspath "$1")
+  [[ -e $f ]] || missing+=("$1")
+  ro_dirs+=("$(dirname "$f")")
+}
+add_rw() { rw_dirs+=("$(abspath "$1")"); }  # created only after every input checks out
 
 csv_inputs() { # print the 'input' column of a CSV/TSV table, relative to the table
   local table=$1 dir; dir=$(dirname "$(abspath "$table")")
@@ -98,7 +102,7 @@ while [[ $i -lt ${#args[@]} ]]; do
       done ;;
     --csv)
       i=$((i + 1)); add_ro "${args[$i]}"
-      [[ -f ${args[$i]} ]] || die "no such file: ${args[$i]}"
+      [[ -f ${args[$i]} ]] || die "no such file: ${args[$i]} (relative to $PWD)"
       while IFS= read -r p; do add_ro "$p"; done < <(csv_inputs "${args[$i]}") ;;
     -o|--output|--work-dir)
       i=$((i + 1)); add_rw "${args[$i]}" ;;
@@ -109,8 +113,16 @@ while [[ $i -lt ${#args[@]} ]]; do
 done
 # `check OUTDIR`: the positional run directory is read (and may be written by nothing)
 if [[ $command == check && ${#args[@]} -ge 2 && ${args[1]} != -* ]]; then
+  [[ -d ${args[1]} ]] || missing+=("${args[1]}")
   ro_dirs+=("$(abspath "${args[1]}")")
 fi
+# check every input before touching anything: podman would otherwise fail on
+# the mount with a cryptic "statfs ...: no such file or directory"
+if [[ ${#missing[@]} -gt 0 ]]; then
+  for f in "${missing[@]}"; do echo "$prog: no such file or directory: $f" >&2; done
+  die "relative paths are relative to the current directory, $PWD"
+fi
+for d in ${rw_dirs[@]+"${rw_dirs[@]}"}; do mkdir -p "$d"; done
 
 # relative paths in the command line resolve against the working directory,
 # so it is mounted and used as the container's working directory too

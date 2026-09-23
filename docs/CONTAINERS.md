@@ -149,6 +149,17 @@ read-write and once read-only, so the output could end up read-only.
 *Fix:* normalise every path (`.`, `..`, `//`) before comparing, so one
 directory is always one string. *Rule:* compare normalised paths.
 
+### 6.6 `Error: statfs /home/.../input: no such file or directory`
+
+*What happened:* `input/scan.mnc` was typed in a different folder than the
+one holding `input/`, so the relative path pointed nowhere. `statfs` is the
+system call podman uses to look at a folder before mounting it; it was
+asked to mount a folder that does not exist.
+*Fix:* the wrapper now checks every input first and names the folder
+relative paths were resolved against, and creates output folders only after
+that. *Rule:* relative paths are relative to where you are (`pwd`), not to
+where the files are.
+
 ## 7. Exercise: build the podman command one piece at a time
 
 Run these in order (on a Linux machine with podman and the image). Steps 4
