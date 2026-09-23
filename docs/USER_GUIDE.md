@@ -305,6 +305,14 @@ hvr-cnn --version
 hvr-cnn <command> --help
 ```
 
+### What each command reads and writes
+
+| command | reads from your disk | writes to your disk | so the container needs |
+|---|---|---|---|
+| `selftest` | nothing (checks packages, programs, weights and templates *inside the image*, runs each model on a blank patch, writes and deletes one test file in the container's `/tmp`) | nothing | nothing mounted; any user |
+| `run` | the scans (`-i`, or the `--csv` table and the scans it lists) | the output folder `-o` (and `--work-dir` if given) | inputs mounted read-only, the output folder mounted writable, running as you |
+| `check` | the output folder and `--reference` | nothing | those folders mounted read-only |
+
 ### `hvr-cnn run`
 
 | option | default | |
