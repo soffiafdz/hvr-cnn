@@ -135,9 +135,29 @@ read-write and once read-only, so the output could end up read-only.
 *Fix:* normalise every path (`.`, `..`, `//`) before comparing, so one
 directory is always one string. *Rule:* compare normalised paths.
 
-## 6. Exercise
+## 6. Exercise: build the podman command one piece at a time
 
-Before relying on the wrapper, type the podman command of section 2 by hand
-for one of your own scans, then run
-`hvr-cnn-container --print run -i <scan> -o <dir>` and compare the two.
-Every difference should be explainable from the tables above.
+Run these in order (on a Linux machine with podman and the image). Steps 4
+and 5 are meant to fail: reading those errors is the point.
+
+0. `export IMG=localhost/hvr-cnn:dev` (a locally built image is called
+   `localhost/<name>:<tag>`).
+1. **Minimum:** `podman run $IMG selftest`, then `podman ps -a`: it
+   worked, but the finished container is still listed. `podman rm -a`
+   cleans up.
+2. **`--rm`:** `podman run --rm $IMG selftest`; `podman ps -a` is now
+   empty.
+3. **Lock down:** `podman run --rm --read-only --network none $IMG
+   selftest` still passes: hvr-cnn writes nothing into the image and needs
+   no network.
+4. **Files, unmounted:** in a folder with a scan,
+   `podman run --rm --read-only --network none $IMG run -i input/scan.mnc -o out`
+   fails with "no such file": the container sees only the image.
+5. **Mount it:** add `--volume $PWD:$PWD --workdir $PWD`. Now it fails
+   with "no permission": the process runs as the image's user (5.2).
+6. **Run as yourself:** add `--userns=keep-id --user $(id -u):$(id -g)`.
+   It works, and `ls -l out` shows the files are yours.
+7. **Compare:** `hvr-cnn-container --print run -i input/scan.mnc -o out`.
+   The only difference: the wrapper mounts the output read-write and the
+   current folder read-only (`:ro`), so inputs cannot be modified by
+   accident.
