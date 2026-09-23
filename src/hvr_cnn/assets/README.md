@@ -12,6 +12,8 @@ removed and the file repacked (`minc_modify_header -delete :ident`,
 | `ensemble_hcvc-ag.pth` | 7a449d26b282a44ca68df6f342388506 | model `detailed`: HC head/body/tail, VC head/body/tail, amygdala |
 | `ref_hcvc.mnc` | 938ebf1cb2d8e1cc479236b2a4e75dd5 | sampling grid for `simple` |
 | `ref_hcvc-ag.mnc` | e29fd08403fa983ce8f8a5207dd4fbb5 | sampling grid for `detailed` |
+| `mni_icbm152_t1_tal_nlin_sym_09c.mnc` | 30a4c9e46e4f7cdf15f5a08b96a8181e | ICBM 152 2009c nonlinear symmetric T1, 1 mm: registration target and intensity reference for `native` / `assemblynet` input. Original 16-bit values (an 8-bit copy changed native-mode volumes by 3.5 %); `:ident` and `:history` removed |
+| `mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc` | 7441c4bd209577287c4150b97236fc0a | its brain mask, byte, unchanged values |
 | `labels.map` | a7bdc784b5637c24d047601fdda3b1d6 | colour lookup for QC images |
 
 Not copied: `ensemble_hvr_extra.pth` and `ref_extra.mnc` are byte-identical

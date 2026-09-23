@@ -72,6 +72,8 @@ def _check_assets():
         grid.close()
         yield ref + " grid", shape == REFERENCE_SHAPE, "x".join(map(str, shape))
     yield "labels.map", (ASSETS / "labels.map").is_file(), ""
+    for name in ("mni_icbm152_t1_tal_nlin_sym_09c.mnc", "mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc"):
+        yield name, (ASSETS / name).is_file(), "template for native input"
 
 
 def _check_models():

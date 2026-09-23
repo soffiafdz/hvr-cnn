@@ -43,5 +43,6 @@ src/hvr_cnn/assets/mni_icbm152_t1_tal_nlin_sym_09c_mask.mnc
     suitability of this software for any purpose. It is provided "as is"
     without express or implied warranty. The authors are not responsible
     for any data/information/dataset-related claim.
-    TO CONFIRM with the copyright holder before release; the files' history
-    and ident header attributes are stripped before bundling.
+    Values unchanged; the files' history and ident header attributes were
+    removed. The original distribution is at
+    https://www.bic.mni.mcgill.ca/~vfonov/icbm/2009/.

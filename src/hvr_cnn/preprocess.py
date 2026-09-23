@@ -160,12 +160,18 @@ def register(source, target, out_xfm, work, source_mask=None, target_mask=None):
 def n3(image, out, mask, field_strength=3.0):
     """N3 bias-field correction with the pipeline's settings (`minc_tools.nu_correct`)."""
     imp = Path(str(out) + ".imp")
+    # explicit scratch inside the work directory: the default follows $TMPDIR or
+    # falls back to /var/tmp, which is read-only in the image
+    tmp = Path(str(out) + "_n3tmp")
+    for sub in ("estimate", "evaluate"):  # the N3 scripts do not create -tmpdir themselves
+        (tmp / sub).mkdir(parents=True, exist_ok=True)
     cmd = ["nu_estimate", "-clobber", "-stop", "0.00001", "-fwhm", "0.1", "-iterations", "1000",
-           image, imp, "-mask", mask]
+           "-tmpdir", tmp / "estimate", image, imp, "-mask", mask]
     if field_strength >= 3.0:
         cmd += ["-distance", "50"]
     minctools.run(cmd)
-    minctools.run(["nu_evaluate", "-clobber", image, "-mapping", imp, out, "-mask", mask])
+    minctools.run(["nu_evaluate", "-clobber", "-tmpdir", tmp / "evaluate", image, "-mapping", imp, out,
+                   "-mask", mask])
     return out
 
 
