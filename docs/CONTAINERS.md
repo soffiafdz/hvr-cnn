@@ -1,0 +1,143 @@
+# Containers, explained
+
+hvr-cnn ships as a container image: a frozen Linux system with Python,
+PyTorch, the MINC tools, the network weights and the template inside. This
+page explains how it is run and why every option is there, so the commands
+stop being magic. `bin/hvr-cnn-container` writes these commands for you;
+`hvr-cnn-container --print ...` shows exactly what it would run.
+
+## 1. The idea in four sentences
+
+An *image* is a read-only file system plus a default command (here:
+`hvr-cnn`). A *container* is one run of that image: a process that sees the
+image's files instead of your machine's, and **none of your files unless you
+mount them**. When the process ends, the container is gone (`--rm`);
+anything it should keep must be written to a mounted directory. Podman,
+Docker and Apptainer are three programs that do this, with different
+defaults.
+
+## 2. Podman, option by option
+
+```sh
+podman run --rm --read-only --network none \
+    --userns=keep-id --user "$(id -u):$(id -g)" \
+    --volume /data/study:/data/study:ro \
+    --volume /data/results:/data/results \
+    --workdir "$PWD" \
+    ghcr.io/soffiafdz/hvr-cnn:0.1.0 \
+    run -i /data/study/sub-01_T1w.nii.gz -o /data/results
+```
+
+| option | what it does | why we use it |
+|---|---|---|
+| `run` | start a container from an image | |
+| `--rm` | delete the container when it exits | otherwise every run leaves a stopped container behind (`podman ps -a`) |
+| `--read-only` | the image's file system cannot be written | proves hvr-cnn writes nothing inside the image; podman still gives writable, in-memory `/tmp`, `/var/tmp`, `/run` |
+| `--network none` | no network inside | hvr-cnn never downloads anything; this guarantees it |
+| `--userns=keep-id` | rootless podman maps users into a private range; `keep-id` maps *your* user id to the same number inside | without it, files written to your folders would belong to an odd high user id |
+| `--user UID:GID` | run the process as that user | **the image's default user wins over `keep-id` alone**: without this, the process ran as the image's user and could not write to your folder (see 5.2) |
+| `--volume HOST:CONTAINER[:ro]` | mount a host directory inside; `:ro` = read-only | the only way the container sees your files. We mount each directory **at the same path**, so `/data/x.mnc` means the same thing inside and out and the command line needs no translation |
+| `--workdir DIR` | the process's current directory | relative paths on the command line (`-o results`) resolve against it; we set it to your current directory (and mount it read-only) |
+| `IMAGE` | which image | a registry reference; a version tag (`:0.1.0`) makes runs reproducible, `:latest` moves |
+| everything after the image | the command | passed to the image's entry point, `hvr-cnn`: `run ...`, `selftest`, `check ...` |
+
+**Docker** is the same except: no `--userns=keep-id` (use `--user` alone),
+and `/tmp` must be made writable explicitly with `--tmpfs /tmp`.
+
+On a Mac with Apple Silicon add `--platform linux/amd64`: the image is built
+for Intel/AMD processors and runs under emulation (slower).
+
+## 3. Apptainer / Singularity (clusters)
+
+```sh
+apptainer run --containall --cleanenv --no-home \
+    --bind /scratch/me/tmp1:/tmp --bind /scratch/me/tmp2:/var/tmp \
+    --bind /data/study:/data/study:ro --bind /data/results:/data/results \
+    --pwd "$PWD" hvr-cnn_0.1.0.sif run -i /data/study/sub-01_T1w.nii.gz -o /data/results
+```
+
+Apptainer's defaults are the opposite of podman's: it runs as you, sees the
+network, and mounts your home, the current directory and `/tmp`
+automatically. We switch that off for reproducibility:
+
+| option | what it does | why |
+|---|---|---|
+| `--containall` | no automatic mounts of home, `/tmp`, current directory | the run depends only on what you mount explicitly |
+| `--cleanenv` | do not pass your environment variables in | a stray `PYTHONPATH` or `OMP_NUM_THREADS` on the host cannot change the run |
+| `--no-home` | do not mount your home | same |
+| `--bind DIR:/tmp`, `--bind DIR:/var/tmp` | real disk space for temporary files | with `--containall`, `/tmp` and `/var/tmp` become small in-memory file systems (the site's "sessiondir max size": 16 MB at BIC); hvr-cnn's intermediate files and N3 overflow it (see 5.3) |
+| `--bind HOST:CONTAINER[:ro]` | like podman's `--volume` | |
+| `--pwd DIR` | like `--workdir` | |
+| `X.sif` or `docker://REF` | a SIF file, or an image pulled and converted on the fly | build the SIF once (`apptainer build hvr-cnn.sif docker://REF`), then reuse it |
+
+## 4. Building the image (maintainers)
+
+```sh
+podman build --platform linux/amd64 -f container/Dockerfile \
+    --build-arg VERSION=0.1.0 --build-arg REVISION=$(git rev-parse HEAD) \
+    -t hvr-cnn:0.1.0 .
+```
+
+`-f` names the recipe, `--build-arg` fills the `ARG`s used in the image's
+labels, `-t` names the result, and `.` is the *build context*: the files
+the recipe may copy. `.dockerignore` is an allow-list, so test data under
+`tests/<subject>/` can never enter the image.
+
+## 5. What went wrong on the way, and why the fix works
+
+These are real failures from setting this up; each teaches one rule.
+
+### 5.1 `zsh: no such file or directory: podman run --rm ...`
+
+*What happened:* the command was stored in a variable,
+`H="podman run --rm ..."`, and run as `$H run ...`. Bash splits an unquoted
+variable into words; **zsh does not**, so zsh looked for a single program
+literally named `podman run --rm ...`.
+*Fix:* a shell function, `H() { podman run --rm ... "$@"; }`. A function's
+body is parsed as a command line in both shells, and `"$@"` passes the
+arguments through unchanged. *Rule:* never store commands in strings.
+
+### 5.2 `PermissionError: [Errno 13] Permission denied: '/kit/mine'`
+
+*What happened:* with `--userns=keep-id` alone, podman kept the user
+declared in the image (the base image's `mambauser`), which is not you and
+cannot write to your directory.
+*Fix:* add `--user "$(id -u):$(id -g)"`. `keep-id` makes your user id exist
+inside the container with the same number; `--user` makes the process
+actually run as it. *Rule:* in rootless podman use both.
+
+### 5.3 `HDF5 ... No space left on device` in the second N3 pass (MNI pipeline image)
+
+*What happened:* the disk was not full. Under Apptainer `--containall`,
+`/var/tmp` is a 16 MB in-memory file system, and N3 writes its work files
+to `/var/tmp`. The first diagnosis ("the host's /tmp is full") was wrong:
+`df` showed /tmp 10 % used; running `df -h /tmp /var/tmp` *inside* the
+container showed the 16 MB `/var/tmp`.
+*Fix:* bind real disk space to `/var/tmp` as well as `/tmp`. hvr-cnn also
+passes N3 an explicit scratch directory inside its own work directory, so
+it no longer depends on `/var/tmp` at all. *Rule:* when a tool reports a
+full disk, check the file system **inside** the container.
+
+### 5.4 The run starts, then nothing happens (MNI pipeline image)
+
+*What happened:* the pipeline's tasks each ask its scheduler (Ray) for
+`--threads` CPUs from a pool of `--prl` CPUs. With `--prl 1 --threads 4`
+no task can ever get 4 CPUs, so the run waits forever without an error.
+*Fix:* `--prl` >= `--threads` (the `mni-lng-pipeline` wrapper sets them
+equal). *Rule:* a silent hang with 0 % CPU is a scheduling deadlock, not
+slowness; `ps` shows it.
+
+### 5.5 `hvr-cnn-container -o .` mounted the same folder twice
+
+*What happened:* the output `.` became `/path/.` while the working directory
+was `/path`: the same folder, two different strings, mounted once
+read-write and once read-only, so the output could end up read-only.
+*Fix:* normalise every path (`.`, `..`, `//`) before comparing, so one
+directory is always one string. *Rule:* compare normalised paths.
+
+## 6. Exercise
+
+Before relying on the wrapper, type the podman command of section 2 by hand
+for one of your own scans, then run
+`hvr-cnn-container --print run -i <scan> -o <dir>` and compare the two.
+Every difference should be explainable from the tables above.

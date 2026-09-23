@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# hvr-cnn-container: run hvr-cnn from its container image without writing the
+# container command yourself. It reads the paths in your hvr-cnn command line,
+# mounts their directories at the same paths inside the container, and adds
+# the options each container tool needs. `--print` shows the command instead
+# of running it. docs/CONTAINERS.md explains every option used below.
+#
+#   hvr-cnn-container [wrapper options] <hvr-cnn command and options>
+#   hvr-cnn-container run -i scans/sub-01_T1w.nii.gz -o results
+#   hvr-cnn-container --print run --csv scans.csv -o results
+set -euo pipefail
+set -f  # no filename wildcards anywhere: paths are split on "/" below
+
+prog=$(basename "$0")
+default_image=ghcr.io/soffiafdz/hvr-cnn:0.1.0
+
+usage() {
+  cat <<EOF
+$prog - run hvr-cnn from its container image
+
+usage: $prog [wrapper options] <command> [hvr-cnn options]
+       e.g. $prog run -i sub-01_T1w.nii.gz -o results
+            $prog selftest
+
+wrapper options (before the hvr-cnn command):
+  --engine NAME   podman, docker, apptainer or singularity
+                  (default: the first one found, in that order)
+  --image REF     image to run (default: \$HVR_CNN_IMAGE, else $default_image);
+                  for apptainer/singularity a .sif file or a registry reference
+  --scratch DIR   scratch space for apptainer/singularity (default: \$TMPDIR or /tmp)
+  --print         print the container command instead of running it
+  -h, --help      this text; 'hvr-cnn --help' is: $prog --help-hvr
+EOF
+}
+
+engine= image=${HVR_CNN_IMAGE:-$default_image} scratch=${TMPDIR:-/tmp} print=0
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --engine) engine=$2; shift 2 ;;
+    --image) image=$2; shift 2 ;;
+    --scratch) scratch=$2; shift 2 ;;
+    --print) print=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --help-hvr) set -- --help; break ;;
+    *) break ;;
+  esac
+done
+[[ $# -gt 0 ]] || { usage >&2; exit 2; }
+die() { echo "$prog: $*" >&2; exit 2; }
+
+if [[ -z $engine ]]; then
+  for e in podman docker apptainer singularity; do
+    if command -v "$e" >/dev/null 2>&1; then engine=$e; break; fi
+  done
+  [[ -n $engine ]] || die "no container tool found (podman, docker, apptainer or singularity)"
+fi
+case $engine in podman|docker|apptainer|singularity) ;; *) die "unknown --engine $engine" ;; esac
+
+# ---- 1. which host directories must the container see? -------------------
+# Everything is mounted at its own absolute path, so the command line needs
+# no rewriting: /data/x.mnc on the host is /data/x.mnc in the container.
+abspath() { # absolute, normalised path (no ".", "..", "//"), which need not exist yet;
+             # plain bash because macOS's realpath has no -m option
+  local p=$1 part out=""
+  case $p in /*) ;; *) p="$PWD/$p" ;; esac
+  local IFS=/
+  for part in $p; do
+    case $part in
+      ""|.) ;;
+      ..) out=${out%/*} ;;
+      *) out="$out/$part" ;;
+    esac
+  done
+  printf '%s\n' "${out:-/}"
+}
+ro_dirs=() rw_dirs=()
+add_ro() { ro_dirs+=("$(dirname "$(abspath "$1")")"); }
+add_rw() { local d; d=$(abspath "$1"); mkdir -p "$d"; rw_dirs+=("$d"); }
+
+csv_inputs() { # print the 'input' column of a CSV/TSV table, relative to the table
+  local table=$1 dir; dir=$(dirname "$(abspath "$table")")
+  awk -v dir="$dir" '
+    NR == 1 { sub(/^\xef\xbb\xbf/, "")                       # Excel byte-order mark
+              fs = (index($0, "\t") ? "\t" : (index($0, ";") ? ";" : ","))
+              n = split($0, h, fs); for (i = 1; i <= n; i++) if (h[i] == "input") col = i
+              next }
+    col { split($0, f, fs); p = f[col]; if (p == "") next
+          if (substr(p, 1, 1) != "/") p = dir "/" p; print p }' FS='\n' "$table"
+}
+
+args=("$@") i=0 command=${args[0]}
+while [[ $i -lt ${#args[@]} ]]; do
+  a=${args[$i]}
+  case $a in
+    -i|--input)
+      while [[ $((i + 1)) -lt ${#args[@]} && ${args[$((i + 1))]} != -* ]]; do
+        i=$((i + 1)); add_ro "${args[$i]}"
+      done ;;
+    --csv)
+      i=$((i + 1)); add_ro "${args[$i]}"
+      [[ -f ${args[$i]} ]] || die "no such file: ${args[$i]}"
+      while IFS= read -r p; do add_ro "$p"; done < <(csv_inputs "${args[$i]}") ;;
+    -o|--output|--work-dir)
+      i=$((i + 1)); add_rw "${args[$i]}" ;;
+    --reference)
+      i=$((i + 1)); ro_dirs+=("$(abspath "${args[$i]}")") ;;
+  esac
+  i=$((i + 1))
+done
+# `check OUTDIR`: the positional run directory is read (and may be written by nothing)
+if [[ $command == check && ${#args[@]} -ge 2 && ${args[1]} != -* ]]; then
+  ro_dirs+=("$(abspath "${args[1]}")")
+fi
+
+# relative paths in the command line resolve against the working directory,
+# so it is mounted and used as the container's working directory too
+workdir=$(abspath "$PWD")
+# (plain arrays only: macOS ships bash 3.2, which has no associative arrays)
+mounts=() mounted=" "
+mount_once() { # $1 dir, $2 "" (read-write) or ":ro"; the first mention of a dir wins
+  case $mounted in *" $1 "*) return ;; esac
+  mounted="$mounted$1 "; mounts+=("$1:$1$2")
+}
+for d in ${rw_dirs[@]+"${rw_dirs[@]}"}; do mount_once "$d" ""; done
+for d in ${ro_dirs[@]+"${ro_dirs[@]}"} "$workdir"; do mount_once "$d" ":ro"; done
+
+# ---- 2. the container command, per tool --------------------------------------
+cmd=()
+case $engine in
+  podman|docker)
+    cmd=("$engine" run --rm
+         --read-only                 # the image cannot be modified
+         --network none              # hvr-cnn never needs the network
+         --workdir "$workdir")
+    if [[ $engine == podman ]]; then
+      # rootless podman: map your user id to the same id inside, then run as it,
+      # so files written to your folders belong to you
+      cmd+=(--userns=keep-id --user "$(id -u):$(id -g)")
+    else
+      cmd+=(--user "$(id -u):$(id -g)" --tmpfs /tmp)
+    fi
+    case $(uname -m) in arm64|aarch64) cmd+=(--platform linux/amd64) ;; esac  # emulated on Apple Silicon
+    for m in "${mounts[@]}"; do cmd+=(--volume "$m"); done
+    cmd+=("$image")
+    ;;
+  apptainer|singularity)
+    # --containall: no automatic home or /tmp from the host; scratch is bound to
+    # /tmp and /var/tmp instead, because the defaults are tiny in-memory
+    # filesystems (16 MB at BIC) that hvr-cnn's intermediate files overflow
+    mkdir -p "$scratch"
+    run_tmp=$(mktemp -d "$scratch/hvr-cnn-container.XXXXXX")
+    mkdir -p "$run_tmp/tmp" "$run_tmp/var_tmp"
+    cmd=("$engine" run --containall --cleanenv --no-home
+         --bind "$run_tmp/tmp:/tmp" --bind "$run_tmp/var_tmp:/var/tmp" --pwd "$workdir")
+    for m in "${mounts[@]}"; do cmd+=(--bind "$m"); done
+    case $image in *.sif) cmd+=("$image") ;; *) cmd+=("docker://$image") ;; esac
+    ;;
+esac
+cmd+=("${args[@]}")
+
+if [[ $print == 1 ]]; then
+  printf '%q ' "${cmd[@]}"; echo
+  [[ -n ${run_tmp:-} ]] && rmdir "$run_tmp/tmp" "$run_tmp/var_tmp" "$run_tmp"
+  exit 0
+fi
+status=0
+"${cmd[@]}" || status=$?
+[[ -n ${run_tmp:-} ]] && rm -rf "$run_tmp"
+exit $status

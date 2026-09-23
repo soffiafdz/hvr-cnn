@@ -57,11 +57,24 @@ docker run --rm ghcr.io/soffiafdz/hvr-cnn:latest selftest
 The same image is published as `docker.io/soffiafdz/hvr_cnn`, the location
 given in the paper.
 
+The easiest way to run it is the wrapper `bin/hvr-cnn-container`, one
+shell script that mounts the files named on the command line and adds the
+right options for podman, docker or apptainer:
+
+```sh
+curl -LO https://raw.githubusercontent.com/soffiafdz/hvr-cnn/main/bin/hvr-cnn-container
+chmod +x hvr-cnn-container
+./hvr-cnn-container run -i sub-01_T1w.nii.gz -o hvr
+./hvr-cnn-container --print run -i sub-01_T1w.nii.gz -o hvr   # show the command instead
+```
+
 ## Documentation
 
 - [User guide](docs/USER_GUIDE.md): installation, inputs, outputs, every
   option, HPC usage, quality control, troubleshooting, and how to move from
   the 0.0.x container.
+- [Containers, explained](docs/CONTAINERS.md): every podman / apptainer
+  option used, and the pitfalls met while setting it up.
 - `hvr-cnn --help` and `hvr-cnn run --help`.
 
 ## Citing

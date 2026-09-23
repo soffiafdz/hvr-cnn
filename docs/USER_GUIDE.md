@@ -88,6 +88,12 @@ space is writable. It ends with `selftest: passed` and exit status 0.
 
 ## 3. First run
 
+**Shortcut:** `bin/hvr-cnn-container` (one shell script, see the README)
+writes the container command for you: `hvr-cnn-container run -i <scan> -o
+<dir>` works the same under podman, docker and apptainer, and `--print`
+shows the command it would run. The rest of this section explains what it
+does; [Containers, explained](CONTAINERS.md) goes option by option.
+
 A container only sees directories you give it. With Docker and Podman that
 is the `-v host_dir:container_dir` option; paths on the command line are
 then paths **inside** the container.
