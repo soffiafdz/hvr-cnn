@@ -140,3 +140,10 @@ def test_paths_become_absolute(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert inputs.from_paths(["d/./a.mnc"])[0].path == tmp_path / "d" / "a.mnc"
     assert inputs.from_csv("t.csv")[0].path == tmp_path / "d" / "a.mnc"
+
+
+def test_csv_dotdot_normalised(tmp_path):
+    touch(tmp_path / "scans" / "a.mnc")
+    (tmp_path / "tables").mkdir()
+    (tmp_path / "tables" / "t.csv").write_text("input\n../scans/a.mnc\n")
+    assert str(inputs.from_csv(tmp_path / "tables" / "t.csv")[0].path) == str(tmp_path / "scans" / "a.mnc")

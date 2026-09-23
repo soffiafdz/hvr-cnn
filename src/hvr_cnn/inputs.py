@@ -91,7 +91,7 @@ def from_csv(csv_path):
                 raise InputError("%s line %d: empty '%s'" % (csv_path, line, CSV_REQUIRED))
             path = Path(value)
             if not path.is_absolute():
-                path = csv_path.parent / path
+                path = Path(os.path.abspath(csv_path.parent / path))  # also resolves "../"
             extra = {k: (row.get(k) or "").strip() or None for k in CSV_OPTIONAL}
             rows.append((path, extra["subject"], extra["session"], extra["group"]))
     if not rows:
