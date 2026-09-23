@@ -60,12 +60,14 @@ def scan_id(path, subject=None, session=None):
 
 
 def from_paths(paths):
-    return _validated((Path(p), None, None, None) for p in paths)
+    # absolute from here on, so logs, volumes.tsv and run.json name the exact file
+    # (os.path.abspath normalises "." and ".." but does not follow symlinks)
+    return _validated((Path(os.path.abspath(p)), None, None, None) for p in paths)
 
 
 def from_csv(csv_path):
     """Read a CSV/TSV with a header row. Relative paths are relative to the table."""
-    csv_path = Path(csv_path)
+    csv_path = Path(os.path.abspath(csv_path))  # so relative entries become absolute too
     if not csv_path.is_file():
         raise InputError("%s: no such file" % csv_path)
     with csv_path.open(newline="", encoding="utf-8-sig") as handle:

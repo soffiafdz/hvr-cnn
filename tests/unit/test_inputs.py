@@ -132,3 +132,11 @@ def test_stx_sidecar_xfm(tmp_path):
     xfm = touch(tmp_path / "stx2_s1_v1_t1.xfm")
     assert preprocess.stx_xfm_for(t1) == xfm
     assert preprocess.stx_xfm_for(touch(tmp_path / "other.nii.gz")) is None
+
+
+def test_paths_become_absolute(tmp_path, monkeypatch):
+    touch(tmp_path / "d" / "a.mnc")
+    (tmp_path / "t.csv").write_text("input\nd/a.mnc\n")
+    monkeypatch.chdir(tmp_path)
+    assert inputs.from_paths(["d/./a.mnc"])[0].path == tmp_path / "d" / "a.mnc"
+    assert inputs.from_csv("t.csv")[0].path == tmp_path / "d" / "a.mnc"
