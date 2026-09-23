@@ -89,6 +89,9 @@ def test_run_defaults():
     args = cli.build_parser().parse_args(["run", "-i", "a.mnc", "b.nii.gz", "-o", "out"])
     assert args.input == ["a.mnc", "b.nii.gz"]
     assert args.qc is True
+    assert args.denoise is True and args.field == 3.0
+    off = cli.build_parser().parse_args(["run", "-i", "a.mnc", "-o", "out", "--no-denoise", "--field", "1.5"])
+    assert off.denoise is False and off.field == 1.5
     assert cli.build_parser().parse_args(["run", "-i", "a.mnc", "-o", "out", "--no-qc"]).qc is False
     assert (args.model, args.input_space, args.device, args.out_format) == (
         "simple", "auto", "cpu", "auto")
@@ -113,3 +116,8 @@ def test_tool_env_puts_prefix_first_and_keeps_caller_path():
 def test_tool_env_is_idempotent():
     once = minctools.tool_env({"PATH": "/usr/bin"})
     assert minctools.tool_env(once) == once
+
+
+def test_field_rejects_other_values():
+    with pytest.raises(SystemExit):
+        cli.main(["run", "-i", "a.mnc", "-o", "out", "--field", "7"])

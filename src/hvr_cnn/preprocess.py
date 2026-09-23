@@ -1,20 +1,26 @@
 """Native T1w -> stereotaxic volume on the ICBM152 2009c grid.
 
-Mirrors the T1 preprocessing of the longitudinal pipeline the network was
-trained on (`t1preprocessing_v10`, non-SynthStrip branch), with its
-parameters, minus everything the network does not need:
+A minimal, cross-sectional version of the T1 preprocessing of the MNI
+longitudinal pipeline (NIST-MNI nist_mni_pipelines 0.2.00, the version
+that produced the UK Biobank `stx2` volumes, and the same N3 + NLM recipe
+as the network's training data), with that pipeline's parameters:
 
-1. optional NLM denoising (sigma = noise estimate x 0.7, patch 3, search 1)
+1. NLM denoising (sigma = noise estimate x 0.7, patch 3, search 1); on by
+   default, as in the pipeline container
 2. winsorize 1-95 % -> Otsu head mask -> defrag -> expand 50 mm, close
 3. linear registration to the template, NMI, masked, four minctracc stages
-   (lsq6 8 mm, lsq7 8 mm, lsq9 4 mm, lsq9 2 mm reversed), the last two
-   nine-parameter: the pipeline's `bestlinreg_20180117` configuration
-4. template brain mask back-projected -> N4 (200 x 4, B-spline 200 mm, or
-   50 mm when `--n4-distance 50`), weight = head mask x brain mask
-5. `volume_pol --order 1` to the template within the masks
-6. `itk_resample --order 4` onto the template grid
+   (lsq6 8 mm, lsq7 8 mm, lsq9 4 mm, lsq9 2 mm reversed): the pipeline's
+   `bestlinreg_20180117` configuration
+4. template brain mask back-projected to native space (the pipeline uses
+   a SynthStrip mask here)
+5. N3 (`nu_estimate -stop 0.00001 -fwhm 0.1 -iterations 1000`, masked,
+   B-spline distance 50 mm at 3 T, the tool default of 200 mm at 1.5 T) ->
+   `volume_pol` gain to the template
+6. second N3 pass -> `volume_pol --order 1` within brain / template masks
+   (the pipeline's `clp2` step)
+7. `itk_resample --order 4` onto the template grid
 
-Cross-sectional: no subject-specific template, unlike the pipeline's stx2.
+Cross-sectional: no subject-specific linear template, unlike `stx2`.
 """
 
 import logging
@@ -151,7 +157,37 @@ def register(source, target, out_xfm, work, source_mask=None, target_mask=None):
     return out_xfm
 
 
-def native_to_stx(t1, out_stx, out_xfm, work, do_denoise=False, n4_distance=200):
+def n3(image, out, mask, field_strength=3.0):
+    """N3 bias-field correction with the pipeline's settings (`minc_tools.nu_correct`)."""
+    imp = Path(str(out) + ".imp")
+    cmd = ["nu_estimate", "-clobber", "-stop", "0.00001", "-fwhm", "0.1", "-iterations", "1000",
+           image, imp, "-mask", mask]
+    if field_strength >= 3.0:
+        cmd += ["-distance", "50"]
+    minctools.run(cmd)
+    minctools.run(["nu_evaluate", "-clobber", image, "-mapping", imp, out, "-mask", mask])
+    return out
+
+
+def intensity_gain(image, out, source_mask=None, target_mask=None):
+    """`volume_pol --order 1` to the template, applied with minccalc (pipeline `minc.volume_pol`)."""
+    tpl_t1, _ = template_files()
+    expfile = Path(str(out) + ".exp")
+    cmd = ["volume_pol", image, tpl_t1, "--order", "1", "--expfile", expfile, "--noclamp", "--clob"]
+    if source_mask is None:  # the pipeline masks out NaNs only
+        source_mask = Path(str(out) + "_valid.mnc")
+        minctools.run(["minccalc", "-q", "-clobber", "-byte", "-labels", "-express", "!isnan(A[0])", image,
+                       source_mask])
+    cmd += ["--source_mask", source_mask]
+    if target_mask is not None:
+        cmd += ["--target_mask", target_mask]
+    minctools.run(cmd)
+    expression = open(str(expfile)).read().strip()
+    minctools.run(["minccalc", "-q", "-clobber", "-expression", expression, image, out, "-zero", "-short"])
+    return out, expression
+
+
+def native_to_stx(t1, out_stx, out_xfm, work, do_denoise=True, field_strength=3.0):
     """Produce the stereotaxic, intensity-normalised volume and the native->stx xfm."""
     work = Path(work)
     tpl_t1, tpl_mask = template_files()
@@ -161,28 +197,17 @@ def native_to_stx(t1, out_stx, out_xfm, work, do_denoise=False, n4_distance=200)
     trunc, closed, defrag = head_mask(fixed, work)
     masked_trunc = work / "trunc_masked.mnc"
     minctools.run(["minccalc", "-q", "-clobber", "-expression", "A[0]*A[1]", trunc, closed, masked_trunc])
-    masked = work / "input_masked.mnc"
-    minctools.run(["minccalc", "-q", "-clobber", "-expression", "A[0]*A[1]", fixed, closed, masked])
     register(masked_trunc, tpl_t1, out_xfm, work)
     brain = work / "brainmask_native.mnc"
-    minctools.run(["itk_resample", tpl_mask, brain, "--clobber", "--labels", "--byte", "--like", defrag,
+    minctools.run(["itk_resample", tpl_mask, brain, "--clobber", "--labels", "--byte", "--like", fixed,
                    "--transform", out_xfm, "--invert_transform"])
-    weight = work / "weightmask.mnc"
-    minctools.run(["minccalc", "-q", "-clobber", "-byte", "-expression", "A[0]*A[1]", defrag, brain, weight])
-    n4 = work / "n4.mnc"
-    minctools.run(["N4BiasFieldCorrection", "-d", "3", "-i", masked, "--rescale-intensities", "1",
-                   "--bspline-fitting", str(n4_distance), "--output", "[%s,%s]" % (n4, work / "n4_field.mnc"),
-                   "--mask-image", closed, "--weight-image", weight,
-                   "--convergence", "[200x200x200x200,0.0]"])
-    n4_short = work / "n4_short.mnc"
-    minctools.run(["mincreshape", "-q", "-clobber", "-short", n4, n4_short])
-    expfile = work / "volpol.exp"
-    minctools.run(["volume_pol", n4_short, tpl_t1, "--order", "1", "--expfile", expfile, "--noclamp", "--clob",
-                   "--source_mask", weight, "--target_mask", tpl_mask])
-    expression = open(str(expfile)).read().strip()
-    clp = work / "clp.mnc"
-    minctools.run(["minccalc", "-q", "-clobber", "-expression", expression, n4_short, clp, "-zero", "-short"])
-    minctools.run(["itk_resample", clp, out_stx, "--clobber", "--order", "4", "--like", tpl_t1,
+    # first pass (pipeline `clp`): N3, then a gain to the template
+    n3_1 = n3(fixed, work / "n3_1.mnc", brain, field_strength)
+    clp, _ = intensity_gain(n3_1, work / "clp.mnc")
+    # second pass (pipeline `clp2`): N3 again, gain within the brain masks
+    n3_2 = n3(clp, work / "n3_2.mnc", brain, field_strength)
+    clp2, _ = intensity_gain(n3_2, work / "clp2.mnc", source_mask=brain, target_mask=tpl_mask)
+    minctools.run(["itk_resample", clp2, out_stx, "--clobber", "--order", "4", "--like", tpl_t1,
                    "--transform", out_xfm, "--short"])
     log.debug("native->stx done: %s", out_stx)
     return out_stx, out_xfm
@@ -215,11 +240,7 @@ def assemblynet_to_stx(mni_t1, mni_mask, out_stx, work):
     tpl_t1, tpl_mask = template_files()
     mask = work / "asm_mask.mnc"
     minctools.run(["mincreshape", "-q", "-clobber", "-byte", mni_mask, mask])
-    expfile = work / "asm_volpol.exp"
-    minctools.run(["volume_pol", mni_t1, tpl_t1, "--order", "1", "--expfile", expfile, "--noclamp", "--clob",
-                   "--source_mask", mask, "--target_mask", tpl_mask])
-    expression = open(str(expfile)).read().strip()
-    minctools.run(["minccalc", "-q", "-clobber", "-expression", expression, mni_t1, out_stx, "-zero", "-short"])
+    _, expression = intensity_gain(mni_t1, out_stx, source_mask=mask, target_mask=tpl_mask)
     log.debug("assemblynet normalisation: %s", expression)
     return out_stx, expression
 

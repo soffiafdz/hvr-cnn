@@ -116,8 +116,13 @@ def build_parser():
     proc.add_argument("--model", default="simple", choices=["simple", "detailed"],
                       help="simple: hippocampus + temporal horn; detailed: head/body/tail of "
                            "both, plus amygdala (default: %(default)s)")
-    proc.add_argument("--denoise", action="store_true",
-                      help="non-local-means denoising before preprocessing (native input only)")
+    proc.add_argument("--no-denoise", dest="denoise", action="store_false",
+                      help="skip non-local-means denoising (native input; on by default, as in "
+                           "the MNI longitudinal pipeline)")
+    proc.add_argument("--denoise", dest="denoise", action="store_true", help=argparse.SUPPRESS)
+    proc.add_argument("--field", type=float, default=3.0, choices=[1.5, 3.0], metavar="{1.5,3}",
+                      help="scanner field strength, sets the N3 bias-field smoothness for native "
+                           "input (default: %(default)g)")
     proc.add_argument("--device", default="cpu", choices=["cpu", "cuda", "auto"],
                       help="auto = cuda when available (default: %(default)s)")
     proc.add_argument("--threads", type=_positive_int, metavar="N",

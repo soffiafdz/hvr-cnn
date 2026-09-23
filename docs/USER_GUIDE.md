@@ -178,7 +178,7 @@ segmentation, so hvr-cnn checks rather than assumes.
 | `--input-space` | use it for | what hvr-cnn does |
 |---|---|---|
 | `stx` | output of a stereotaxic pipeline that matches the description above (e.g. `stx2_*_t1.mnc` of the MNI/BIC longitudinal pipeline) | verifies the geometry (1 mm, no rotation, field of view covers the medial temporal lobes), warns when the intensity range inside the medial temporal region is far from the training scale, segments |
-| `native` | a raw scan from the scanner / `dcm2niix` / BIDS | head mask, nine-parameter linear registration to the template (normalised mutual information, four stages), N4 bias-field correction, linear intensity normalisation to the template, resampling; optional denoising (`--denoise`); then segments. Labels are written in stereotaxic **and** native space, with the transform |
+| `native` | a raw scan from the scanner / `dcm2niix` / BIDS | a minimal, cross-sectional version of the MNI longitudinal pipeline's T1 preprocessing (the one behind the training data and the UK Biobank norms), with its parameters: non-local-means denoising (`--no-denoise` to skip), head mask, nine-parameter linear registration to the template (normalised mutual information, four stages), two passes of N3 bias-field correction within the back-projected template brain mask (B-spline spacing set by `--field`), linear intensity normalisation to the template, resampling; then segments. Labels are written in stereotaxic **and** native space, with the transform |
 | `assemblynet` | the `mni_t1_*.nii.gz` of an AssemblyNet run, with its `mni_mask_*.nii.gz` in the same directory | rescales the intensities to the training scale (a linear fit to the template within the brain masks; AssemblyNet's own scale is about 2.5 x higher), segments on AssemblyNet's MNI grid, so the labels overlay AssemblyNet's own. No registration. Labels are not written back to native space |
 | `auto` (default) | anything | `assemblynet` when the file is an `mni_t1_*` with its `mni_mask_*` next to it; otherwise decides from the geometry (`stx` when the voxel grid is the ICBM152 1 mm grid or a window of it, else `native`); **logs the decision**; pass the explicit value if it guesses wrong |
 
@@ -311,7 +311,8 @@ hvr-cnn <command> --help
 | `--no-qc` | QC on | skip the QC picture |
 | `--overwrite` | off | redo scans whose outputs exist. Default is to skip them, so an interrupted run resumes with the same command |
 | `--model {simple,detailed}` | `simple` | section 1 |
-| `--denoise` | off | non-local-means denoising (native input only) |
+| `--no-denoise` | denoising on | skip the non-local-means denoising of native input |
+| `--field {1.5,3}` | `3` | scanner field strength of native input; sets the N3 B-spline spacing (50 mm at 3 T, 200 mm at 1.5 T) as in the MNI pipeline |
 | `--device {cpu,cuda,auto}` | `cpu` | `cuda` needs the CUDA image *(planned)* |
 | `--threads N` | what the scheduler allows | honours CPU affinity / cgroups, `SLURM_CPUS_PER_TASK` and `OMP_NUM_THREADS`, never the size of the node |
 | `--work-dir DIR` | temporary | intermediate files; removed afterwards unless `--keep-work` |
@@ -386,8 +387,8 @@ apptainer run -B "$SCRATCH" hvr-cnn_0.1.0.sif \
 ```
 
 Budget roughly one to two minutes per already-stereotaxic scan on 8 cores
-and 1 GB of memory; a raw scan takes about two minutes more for the
-preprocessing (registration and bias-field correction).
+and 1 GB of memory; a raw scan takes about five minutes more for the
+preprocessing (denoising, registration and two bias-field corrections).
 
 ## 9. Quality control
 
@@ -456,9 +457,12 @@ unchanged: same weights, same sampling, same label values.
   children, on other contrasts, or on post-surgical anatomy.
 - Native input is processed cross-sectionally. The paper used a
   longitudinal pipeline with a subject-specific template; visits of one
-  person processed here are registered independently. On the test scan the
-  two agree with a Dice of about 0.93 for the hippocampus and 0.78 for the
-  temporal horn in native space, and HVR within 0.015.
+  person processed here are registered independently, without SynthStrip
+  and without a subject template. On the test scan the two agree with a
+  Dice of about 0.93 for the hippocampus and 0.78 for the temporal horn in
+  native space, and HVR within 0.007. For results on the same footing as
+  the UK Biobank norms, preprocess with the MNI longitudinal pipeline
+  itself and give hvr-cnn its `stx2` volumes.
 - AssemblyNet input on the same test scan: hippocampal volume within 1 % of
   the pipeline's, temporal horn 11-14 % larger, HVR about 0.02 lower.
   AssemblyNet's preprocessing (SANLM, its own N4 and normalisation) differs

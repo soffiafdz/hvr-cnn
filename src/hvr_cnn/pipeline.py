@@ -117,7 +117,8 @@ def process_scan(scan, args, model, device, outdir, work_root):
             t1 = work / ("%s_stx.mnc" % scan.id)
             started_pre = time.time()
             try:
-                preprocess.native_to_stx(native_t1, t1, xfm, work, do_denoise=args.denoise)
+                preprocess.native_to_stx(native_t1, t1, xfm, work, do_denoise=args.denoise,
+                                         field_strength=args.field)
             except preprocess.PreprocessError as exc:
                 raise ScanError(str(exc)) from None
             info["preprocessing_seconds"] = round(time.time() - started_pre, 1)
