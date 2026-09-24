@@ -175,6 +175,15 @@ if [[ $print == 1 ]]; then
   [[ -n ${run_tmp:-} ]] && rmdir "$run_tmp/tmp" "$run_tmp/var_tmp" "$run_tmp"
   exit 0
 fi
+# say which image is used when it is not on this machine yet, so a failed
+# download (e.g. "403 Forbidden" for an unpublished tag) is not a mystery
+case $engine in
+  podman|docker)
+    if ! "$engine" image inspect "$image" >/dev/null 2>&1; then
+      echo "$prog: image $image is not on this machine; $engine will try to download it" >&2
+      echo "$prog: (a locally built or loaded image: --image localhost/<name>:<tag> or HVR_CNN_IMAGE)" >&2
+    fi ;;
+esac
 status=0
 "${cmd[@]}" || status=$?
 [[ -n ${run_tmp:-} ]] && rm -rf "$run_tmp"

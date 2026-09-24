@@ -160,6 +160,18 @@ relative paths were resolved against, and creates output folders only after
 that. *Rule:* relative paths are relative to where you are (`pwd`), not to
 where the files are.
 
+### 6.7 `Requesting bearer token: received unexpected HTTP status: 403 Forbidden`
+
+*What happened:* the wrapper was not told which image to use and fell back
+to the release image `ghcr.io/soffiafdz/hvr-cnn:0.1.0`, which was not
+published yet; the registry answers 403 for a package that does not exist
+or is not public. The image actually on the machine was the loaded
+`localhost/hvr-cnn:dev`.
+*Fix:* `--image localhost/hvr-cnn:dev`, or `export HVR_CNN_IMAGE=...` in
+the same terminal (an `export` lasts only for that terminal session). The
+wrapper now says when an image is not on the machine and will be
+downloaded. *Rule:* check which image a command uses (`--print` shows it).
+
 ## 7. Exercise: build the podman command one piece at a time
 
 Run these in order (on a Linux machine with podman and the image). Steps 4
