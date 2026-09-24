@@ -1,0 +1,42 @@
+# hvr-cnn GPU environment: container/env.yaml with a CUDA build of pytorch.
+# Keep every other line identical to env.yaml. Exact builds will live in
+# container/conda-linux-64-cuda.lock.
+name: hvr-cnn-cuda
+channels:
+  - conda-forge
+  - minc-forge
+  - nodefaults
+dependencies:
+  # interpreter; newest python that minc2-simple 0.2.40.0 is built for
+  # (py310-py313 on minc-forge, no py314 yet)
+  - python=3.13
+  # inference; cuda129_generic = CUDA 12.9, no MKL. 12.9 rather than 13.0 because
+  # CUDA 12.x runs on any NVIDIA driver >= 525 (minor-version compatibility),
+  # 13.0 needs >= 580. The CUDA libraries come with it as conda packages; only
+  # the driver comes from the host (apptainer --nv, podman CDI).
+  - pytorch=2.13.*=cuda129_generic_*
+  # arrays for minc2_simple / nibabel / torch interchange
+  - numpy=2.*
+  # NIfTI boundary: re-impose input affine/shape on outputs
+  - nibabel=5.4.*
+  # all MINC command-line tools (itk_resample, itk_convert, volume_pol,
+  # minctracc, N4, dcm2mnc, print_all_labels, mincpik ...); exact version is
+  # forced by minc2-simple 0.2.40.0 and keeps the solver off the stale 2023
+  # "1.9.19" build
+  - minc-toolkit-v2=1.9.18.15
+  # undeclared dependency of minc-toolkit-v2's dcm2mnc (libarchive.so.13);
+  # without it dcm2mnc silently loads the host's copy, or fails to start
+  - libarchive
+  # python MINC I/O used by the segmentation code
+  - minc2-simple=0.2.40.0
+  # fixtures only: DICOM -> raw NIfTI (second, independent converter)
+  - dcm2niix=1.0.20260416
+  # QC picture: convert/montage, also called by mincpik
+  - imagemagick=7.1.*
+  # progress bars for interactive runs (off by default in batch logs); also
+  # imported by the old code, which step 0c runs unmodified for the baseline
+  - tqdm=4.*
+  # unit tests; also lets the tests run inside the image
+  - pytest=9.*
+  # `pip install --no-deps .` of this package in the env and in the image
+  - pip
