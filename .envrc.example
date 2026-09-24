@@ -1,0 +1,18 @@
+# direnv settings for working in this repository (hestia, janus, tango, ...).
+# Copy once per machine and allow it:
+#   cp .envrc.example .envrc && direnv allow
+# `.envrc` itself is git-ignored, so edit it freely.
+
+# hvr-cnn-container callable from anywhere inside the repository
+PATH_add bin
+
+# run the image you built or loaded, not the published release
+export HVR_CNN_IMAGE=localhost/hvr-cnn:dev
+
+# Linux machines with the development environment (unit tests without the
+# image): activate it. Needs micromamba's shell hook, e.g. in ~/.zshrc:
+#   eval "$(micromamba shell hook --shell zsh)"
+# if has micromamba && micromamba env list | grep -q '^ *hvr-cnn '; then
+#   eval "$(micromamba shell hook --shell bash)"
+#   micromamba activate hvr-cnn
+# fi
