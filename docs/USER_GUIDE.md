@@ -64,21 +64,22 @@ works without network access.
 | registry | reference |
 |---|---|
 | GitHub Container Registry | `ghcr.io/soffiafdz/hvr-cnn:<version>` |
-| Docker Hub (location printed in the paper) | `docker.io/soffiafdz/hvr_cnn:<version>` |
+| Docker Hub (location printed in the paper) | `docker.io/soffiafdz/hvr_cnn:<version>` (0.0.x only until 0.1.0 is released) |
 
-Pin a version (`:0.1.0`) in anything you intend to publish; `:latest`
-moves. Image for `linux/amd64`; on Apple Silicon it runs under emulation.
+Always name a version. The current one is the release candidate
+`0.1.0-rc1`; there is no `:latest` tag yet. Image for `linux/amd64`; on
+Apple Silicon it runs under emulation.
 
 ```sh
-docker pull ghcr.io/soffiafdz/hvr-cnn:latest          # Docker
-podman pull ghcr.io/soffiafdz/hvr-cnn:latest          # Podman
-apptainer pull hvr-cnn.sif docker://ghcr.io/soffiafdz/hvr-cnn:latest   # Apptainer / Singularity
+docker pull ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1          # Docker
+podman pull ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1          # Podman
+apptainer pull hvr-cnn.sif docker://ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1   # Apptainer / Singularity
 ```
 
 Verify the installation. This needs no data and takes a few seconds:
 
 ```sh
-docker run --rm ghcr.io/soffiafdz/hvr-cnn:latest selftest
+docker run --rm ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1 selftest
 apptainer run hvr-cnn.sif selftest
 ```
 
@@ -100,13 +101,16 @@ then paths **inside** the container.
 
 ```sh
 cd /path/to/study                      # contains sub-01_T1w.nii.gz
-docker run --rm -v "$PWD":/data ghcr.io/soffiafdz/hvr-cnn:latest \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/data \
+    ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1 \
     run -i /data/sub-01_T1w.nii.gz -o /data/hvr
 ```
 
-Docker writes files as root unless told otherwise; add
-`--user "$(id -u):$(id -g)"` so the results belong to you. Podman
-(rootless) and Apptainer already run as you.
+`--user` is required. Without it the process runs as the image's own user
+(`mambauser`), which cannot write to your folder. Rootless Podman needs
+`--userns=keep-id --user "$(id -u):$(id -g)"` (both; see
+[Containers, explained](CONTAINERS.md), 6.2). Apptainer runs as you
+already.
 
 Apptainer mounts your home and current directory by default, so host paths
 work unchanged:

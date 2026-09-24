@@ -14,12 +14,13 @@ hippocampal volume alone (see [Citing](#citing)).
 hvr-cnn is distributed as a container image. It needs no MINC toolkit, no
 Python environment and no network access on the machine that runs it.
 
-> **Status: pre-release.** This repository is the rewrite of the container
-> published with the paper (`soffiafdz/hvr_cnn` 0.0.x on Docker Hub). All
-> input modes, both models, volumes/HVR, QC pictures and the output checker
-> work and reproduce the published container's segmentations exactly on
-> stereotaxic input; the image itself has not been built and tested yet.
-> Until 0.1.0 is tagged, use the published 0.0.2 image for real work.
+> **Status: release candidate `0.1.0-rc1`.** This repository is the rewrite
+> of the container published with the paper (`soffiafdz/hvr_cnn` 0.0.x on
+> Docker Hub). On stereotaxic input it reproduces the published container's
+> segmentations exactly. The image `ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1` is
+> tested with Podman on Linux and on macOS (Apple silicon, emulated), not
+> yet with Apptainer on a cluster. Until 0.1.0 is released, use the
+> published 0.0.2 image for results you intend to publish.
 
 ## What it does
 
@@ -29,44 +30,42 @@ Python environment and no network access on the machine that runs it.
 | Accepted spaces | already stereotaxic (ICBM152 2009c, intensity-normalised), raw / native, or AssemblyNet `mni_t1` output |
 | Models | `simple`: left/right hippocampus and temporal horn. `detailed`: head, body and tail of both, plus amygdala |
 | Output | label volumes in the format of the input, `volumes.tsv` (volumes and HVR per hemisphere), a QC picture per scan (on by default), `run.json` (provenance, per-scan status) |
-| Hardware | CPU; about one minute and 1 GB of memory per already-stereotaxic scan on 8 cores, about three minutes for a raw scan (preprocessing included) |
+| Hardware | CPU. Per scan, measured with the default model and QC: about 2 minutes for an already-stereotaxic scan and 6 for a raw scan (preprocessing included) on a 12-core Linux machine; about 3 and 13 on an Apple-silicon Mac with 6 CPUs given to the Podman VM |
 | Runtimes | Docker, Podman, Apptainer / Singularity (HPC) |
 
 ## Quick start
 
-Docker or Podman:
-
-```sh
-docker run --rm -v "$PWD":/data ghcr.io/soffiafdz/hvr-cnn:latest \
-    run -i /data/sub-01_T1w.nii.gz -o /data/hvr
-```
-
-Apptainer / Singularity on a cluster:
-
-```sh
-apptainer pull hvr-cnn.sif docker://ghcr.io/soffiafdz/hvr-cnn:latest
-apptainer run hvr-cnn.sif run --csv scans.csv -o results
-```
-
 Check an installation (needs no data):
 
 ```sh
-docker run --rm ghcr.io/soffiafdz/hvr-cnn:latest selftest
+podman run --rm ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1 selftest
 ```
 
-The same image is published as `docker.io/soffiafdz/hvr_cnn`, the location
-given in the paper.
-
-The easiest way to run it is the wrapper `bin/hvr-cnn-container`, one
-shell script that mounts the files named on the command line and adds the
-right options for podman, docker or apptainer:
+The easiest way to process scans is the wrapper `bin/hvr-cnn-container`,
+one shell script that mounts the files named on the command line and adds
+the right options for podman, docker or apptainer:
 
 ```sh
 curl -LO https://raw.githubusercontent.com/soffiafdz/hvr-cnn/main/bin/hvr-cnn-container
 chmod +x hvr-cnn-container
-./hvr-cnn-container run -i sub-01_T1w.nii.gz -o hvr
-./hvr-cnn-container --print run -i sub-01_T1w.nii.gz -o hvr   # show the command instead
+export HVR_CNN_IMAGE=ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1
+./hvr-cnn-container run -i /data/study/sub-01_T1w.nii.gz -o /data/study/hvr
+./hvr-cnn-container --print run -i /data/study/sub-01_T1w.nii.gz -o /data/study/hvr   # show the command instead
 ```
+
+The same run without the wrapper, with rootless Podman:
+
+```sh
+podman run --rm --read-only --network none \
+    --userns=keep-id --user "$(id -u):$(id -g)" \
+    --volume /data/study:/data/study \
+    ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1 \
+    run -i /data/study/sub-01_T1w.nii.gz -o /data/study/hvr
+```
+
+`--user` is required: without it the process runs as the image's own user
+and cannot write to your folder. [Containers, explained](docs/CONTAINERS.md)
+goes through every option, including Docker and Apptainer.
 
 ## Documentation
 
@@ -93,8 +92,9 @@ The analysis code of the paper lives in
 
 ## Licence
 
-Code: GPL-3.0 (see `LICENSE`). Network architecture and inference code in
-`src/model/` by Vladimir S. Fonov, included with permission. Terms for the
-trained weights and third-party components: see `NOTICE`.
+Code: GPL-3.0 (see `LICENSE`). Trained weights: CC BY 4.0 (cite the paper
+above). Network architecture and inference code in `src/model/` by
+Vladimir S. Fonov, included with permission. Third-party components: see
+`NOTICE`.
 
 No imaging data is distributed with this repository or with the image.

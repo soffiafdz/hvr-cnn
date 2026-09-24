@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hvr-cnn"
 description = "Hippocampus / temporal-horn segmentation and hippocampal-to-ventricle ratio"
-license = { text = "GPL-3.0-only" }
+license = { text = "GPL-3.0-only AND CC-BY-4.0" }
 authors = [{ name = "Sofia Fernandez-Lozano" }]
 requires-python = ">=3.10"
 dynamic = ["version"]

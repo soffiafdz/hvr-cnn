@@ -39,7 +39,7 @@ LABEL org.opencontainers.image.title="hvr-cnn" \
       org.opencontainers.image.description="Hippocampus / temporal-horn segmentation and hippocampal-to-ventricle ratio" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.licenses="GPL-3.0-only" \
+      org.opencontainers.image.licenses="GPL-3.0-only AND CC-BY-4.0" \
       org.opencontainers.image.source="https://github.com/soffiafdz/hvr-cnn"
 
 # Absolute path: must not depend on the working directory, PATH or the user.

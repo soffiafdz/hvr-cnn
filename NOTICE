@@ -4,15 +4,17 @@ Copyright (C) Sofia Fernandez-Lozano
 This program is free software: you can redistribute it and/or modify it
 under the terms of the GNU General Public License version 3 (see LICENSE).
 
-DRAFT - wording and licences below are to be confirmed before first release.
+DRAFT - the item marked TO CONFIRM must be settled before release 0.1.0.
 
 Trained weights
 ---------------
 src/hvr_cnn/assets/ensemble_hcvc.pth
 src/hvr_cnn/assets/ensemble_hcvc-ag.pth
-    Trained by Sofia Fernandez-Lozano.
-    Licence: TO CONFIRM (proposal: CC BY 4.0, or GPL-3.0 to match the code).
-    Note: the training data's terms may constrain this; check before release.
+    Copyright (C) Sofia Fernandez-Lozano.
+    Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+    https://creativecommons.org/licenses/by/4.0/
+    Attribution: cite Fernandez-Lozano et al., Human Brain Mapping 2025;
+    46: e70265, https://doi.org/10.1002/hbm.70265
 
 Network architecture, training and inference code
 -------------------------------------------------
