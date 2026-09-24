@@ -97,6 +97,18 @@ def test_apptainer_sif_used_as_is(tmp_path):
     assert "/images/hvr-cnn.sif" in cmd and not any(a.startswith("docker://") for a in cmd)
 
 
+@pytest.mark.parametrize("engine,flags", [("podman", ["--device", "nvidia.com/gpu=all"]),
+                                          ("docker", ["--gpus", "all"]),
+                                          ("apptainer", ["--nv"])])
+def test_gpu_option(tmp_path, engine, flags):
+    plain = printed(tmp_path, "selftest", engine=engine)
+    cmd = printed(tmp_path, "--gpu", "selftest", engine=engine)
+    assert not any(f in plain for f in ("--nv", "--gpus", "--device"))
+    i = cmd.index(flags[0])
+    assert cmd[i:i + len(flags)] == flags
+    assert cmd.index(flags[0]) < cmd.index("selftest")   # a container option, not an hvr-cnn one
+
+
 def test_check_mounts_run_and_reference(tmp_path):
     ref = tmp_path / "ref" / "run1"
     (tmp_path / "mine" / "run1").mkdir(parents=True)

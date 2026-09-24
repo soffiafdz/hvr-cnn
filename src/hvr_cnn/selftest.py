@@ -88,6 +88,32 @@ def _check_models():
         yield "model " + name, ok, "%s in %.1fs" % (tuple(out.shape), time.time() - start)
 
 
+def _check_gpu():
+    """Only in a CUDA build: can it use the GPU it sees? No GPU visible is not a failure."""
+    import torch
+
+    if torch.version.cuda is None:
+        return  # CPU image
+    if not torch.cuda.is_available():
+        yield "gpu", True, "none visible: runs on CPU (container needs --gpu / --nv)"
+        return
+    major, minor = torch.cuda.get_device_capability(0)
+    arch = torch.cuda.get_arch_list()
+    # native code for this GPU generation (sm_XY), or PTX for an older one that the driver compiles
+    ok = "sm_%d%d" % (major, minor) in arch or any(
+        a.startswith("compute_") and int(a[8:]) <= major * 10 + minor for a in arch)
+    yield "gpu " + torch.cuda.get_device_name(0), ok, "sm_%d%d, build has %s" % (major, minor, " ".join(arch))
+    if not ok:
+        return
+    model = load_model("simple", "cuda")
+    start = time.time()
+    with torch.no_grad():
+        out = model(torch.zeros(1, 1, PATCH, PATCH, PATCH, device="cuda"))["seg"]
+    torch.cuda.synchronize()
+    yield "model simple on cuda", tuple(out.shape) == (1, 3, PATCH, PATCH, PATCH), \
+        "%s in %.1fs" % (tuple(out.shape), time.time() - start)
+
+
 def _check_tmp():
     with tempfile.TemporaryDirectory(prefix="hvr-cnn-") as d:
         probe = Path(d) / "probe"
@@ -105,7 +131,7 @@ def run():
              torch.__version__, torch.version.cuda, torch.cuda.is_available(),
              torch.get_num_threads(), os.getuid(), os.getcwd())
     failures = 0
-    for group in (_check_imports, _check_tools, _check_assets, _check_models, _check_tmp):
+    for group in (_check_imports, _check_tools, _check_assets, _check_models, _check_gpu, _check_tmp):
         try:
             for what, ok, detail in group():
                 log.log(logging.INFO if ok else logging.ERROR,

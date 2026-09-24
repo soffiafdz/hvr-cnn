@@ -28,18 +28,21 @@ wrapper options (before the hvr-cnn command):
   --image REF     image to run (default: \$HVR_CNN_IMAGE, else $default_image);
                   for apptainer/singularity a .sif file or a registry reference
   --scratch DIR   scratch space for apptainer/singularity (default: \$TMPDIR or /tmp)
+  --gpu           give the container the host's NVIDIA GPUs (needs the -cuda image;
+                  hvr-cnn still needs '--device cuda' or '--device auto' to use them)
   --print         print the container command instead of running it
   -h, --help      this text; 'hvr-cnn --help' is: $prog --help-hvr
 EOF
 }
 
-engine= image=${HVR_CNN_IMAGE:-$default_image} scratch=${TMPDIR:-/tmp} print=0
+engine= image=${HVR_CNN_IMAGE:-$default_image} scratch=${TMPDIR:-/tmp} print=0 gpu=0
 while [[ $# -gt 0 ]]; do
   case $1 in
     --engine) engine=$2; shift 2 ;;
     --image) image=$2; shift 2 ;;
     --scratch) scratch=$2; shift 2 ;;
     --print) print=1; shift ;;
+    --gpu) gpu=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --help-hvr) set -- --help; break ;;
     *) break ;;
@@ -152,6 +155,11 @@ case $engine in
       cmd+=(--user "$(id -u):$(id -g)" --tmpfs /tmp)
     fi
     case $(uname -m) in arm64|aarch64) cmd+=(--platform linux/amd64) ;; esac  # emulated on Apple Silicon
+    # GPUs: the image has CUDA, the host's driver is mounted in by NVIDIA's
+    # container toolkit (podman reads its CDI file /etc/cdi/nvidia.yaml)
+    if [[ $gpu == 1 ]]; then
+      if [[ $engine == podman ]]; then cmd+=(--device nvidia.com/gpu=all); else cmd+=(--gpus all); fi
+    fi
     for m in "${mounts[@]}"; do cmd+=(--volume "$m"); done
     cmd+=("$image")
     ;;
@@ -164,6 +172,7 @@ case $engine in
     mkdir -p "$run_tmp/tmp" "$run_tmp/var_tmp"
     cmd=("$engine" run --containall --cleanenv --no-home
          --bind "$run_tmp/tmp:/tmp" --bind "$run_tmp/var_tmp:/var/tmp" --pwd "$workdir")
+    [[ $gpu == 1 ]] && cmd+=(--nv)  # mounts the host's NVIDIA driver libraries and devices
     for m in "${mounts[@]}"; do cmd+=(--bind "$m"); done
     case $image in *.sif) cmd+=("$image") ;; *) cmd+=("docker://$image") ;; esac
     ;;

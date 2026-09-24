@@ -1,17 +1,19 @@
-# hvr-cnn CPU image. Build from the repository root:
+# hvr-cnn image. Build from the repository root:
 #   podman build --platform linux/amd64 -f container/Dockerfile \
 #       --build-arg VERSION=... --build-arg REVISION=$(git rev-parse HEAD) -t hvr-cnn .
-#
-# DRAFT: base image tag/digest proposed, not yet approved or built.
+# GPU variant: add --build-arg LOCK=conda-linux-64-cuda.lock (tag it <version>-cuda).
 ARG BASE=docker.io/mambaorg/micromamba:2.9.0-debian13-slim@sha256:e0a99b0f17a759e14c2f967dc0ca2d3a3c1ca3c62955f4d20bba770eaaf0184d
 FROM ${BASE}
 
-# The same explicit lock file the development env is created from.
+# The same explicit lock file the development env is created from: the CPU one
+# by default, the CUDA one for the GPU image. An explicit lock is installed as
+# listed, without solving, so building the GPU image needs no GPU.
 # Install and clean in one layer so the package cache never reaches the image.
-COPY --chown=$MAMBA_USER:$MAMBA_USER container/conda-linux-64.lock /tmp/conda-linux-64.lock
-RUN micromamba install -y -n base -f /tmp/conda-linux-64.lock \
+ARG LOCK=conda-linux-64.lock
+COPY --chown=$MAMBA_USER:$MAMBA_USER container/${LOCK} /tmp/env.lock
+RUN micromamba install -y -n base -f /tmp/env.lock \
     && micromamba clean --all --yes \
-    && rm /tmp/conda-linux-64.lock
+    && rm /tmp/env.lock
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER pyproject.toml LICENSE NOTICE /tmp/hvr-cnn/
 COPY --chown=$MAMBA_USER:$MAMBA_USER src /tmp/hvr-cnn/src
