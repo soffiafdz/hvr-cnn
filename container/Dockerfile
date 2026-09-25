@@ -9,11 +9,14 @@ FROM ${BASE}
 # by default, the CUDA one for the GPU image. An explicit lock is installed as
 # listed, without solving, so building the GPU image needs no GPU.
 # Install and clean in one layer so the package cache never reaches the image.
+# `clean --all` keeps the unpacked packages in /opt/conda/pkgs because the env's
+# files are hard links to them; nothing reads them at run time, and the files
+# that were copied rather than linked cost 1.3 GB in the CUDA image, so remove them.
 ARG LOCK=conda-linux-64.lock
 COPY --chown=$MAMBA_USER:$MAMBA_USER container/${LOCK} /tmp/env.lock
 RUN micromamba install -y -n base -f /tmp/env.lock \
     && micromamba clean --all --yes \
-    && rm /tmp/env.lock
+    && rm -rf /opt/conda/pkgs /tmp/env.lock
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER pyproject.toml LICENSE NOTICE /tmp/hvr-cnn/
 COPY --chown=$MAMBA_USER:$MAMBA_USER src /tmp/hvr-cnn/src
