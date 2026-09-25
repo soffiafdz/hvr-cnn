@@ -216,6 +216,7 @@ def run(args, scans):
     outdir.mkdir(parents=True, exist_ok=True)
     threads = args.threads or _default_threads()
     torch.set_num_threads(threads)
+    minctools.set_threads(threads)
     try:
         device = _pick_device(args.device)
     except ScanError as exc:

@@ -118,6 +118,25 @@ def test_tool_env_is_idempotent():
     assert minctools.tool_env(once) == once
 
 
+def test_tool_env_passes_threads_to_itk(monkeypatch):
+    assert "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS" not in minctools.tool_env({"PATH": "/usr/bin"})
+    monkeypatch.setattr(minctools, "THREADS", 2)
+    env = minctools.tool_env({"PATH": "/usr/bin", "OMP_NUM_THREADS": "64"})
+    assert env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] == "2"
+    assert env["OMP_NUM_THREADS"] == "2"  # --threads wins over the caller's environment
+
+
+def test_models_load_in_full_precision():
+    import torch
+    from hvr_cnn import selftest
+
+    selftest.load_model("simple")
+    assert not torch.backends.cudnn.allow_tf32 and not torch.backends.cuda.matmul.allow_tf32
+    # the model code's @autocast() is bound at import: it must be the disabled one
+    import model.basic2
+    assert model.basic2.autocast()._enabled is False  # would be float16 on a GPU otherwise
+
+
 def test_field_rejects_other_values():
     with pytest.raises(SystemExit):
         cli.main(["run", "-i", "a.mnc", "-o", "out", "--field", "7"])

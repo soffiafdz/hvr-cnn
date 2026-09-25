@@ -33,6 +33,14 @@ def prefix():
     return sys.prefix
 
 
+THREADS = None  # set by the pipeline from --threads; None = the tools' own default
+
+
+def set_threads(n):
+    global THREADS
+    THREADS = n
+
+
 def tool_env(base=None):
     """Environment for child processes: the prefix's tools first on PATH."""
     p = prefix()
@@ -49,6 +57,11 @@ def tool_env(base=None):
     env.setdefault("MINC_FORCE_V2", "1")
     env.setdefault("MINC_COMPRESS", "4")
     env.setdefault("VOLUME_CACHE_THRESHOLD", "-1")
+    if THREADS:
+        # ITK-based tools (NLM denoising, resampling) otherwise start one thread
+        # per core of the whole machine, not per core the job was given
+        env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(THREADS)
+        env["OMP_NUM_THREADS"] = str(THREADS)
     return env
 
 

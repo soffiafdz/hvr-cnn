@@ -28,9 +28,29 @@ IMPORTS = ("numpy", "torch", "nibabel", "minc2_simple",
            "model.ensemble", "model.vae2", "model.basic2", "model.util")
 
 
+def full_precision():
+    """Make CUDA inference compute exactly like the CPU (float32 throughout).
+
+    The model code decorates its forward methods with `torch.cuda.amp.autocast()`,
+    which runs them in float16 on a GPU (a no-op on CPU), and on Ampere and newer
+    GPUs PyTorch uses TF32 (10-bit mantissa) for convolutions by default. With
+    both, GPU labels differed from CPU labels by a few voxels; with neither they
+    are identical, at the same speed (measured on an RTX 3070). The decorator is
+    bound when `model` is first imported, i.e. when the first weight file is
+    unpickled, so this must run before that.
+    """
+    import torch
+
+    if "model.basic2" not in sys.modules:
+        torch.cuda.amp.autocast = lambda *args, **kwargs: torch.autocast("cuda", enabled=False)
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cuda.matmul.allow_tf32 = False
+
+
 def load_model(name, device="cpu"):
     import torch
 
+    full_precision()
     weights = ASSETS / MODELS[name][0]
     # full-object pickle shipped inside the package, hence weights_only=False
     model = torch.load(str(weights), map_location="cpu", weights_only=False)
@@ -130,6 +150,7 @@ def run():
     log.info("torch %s | cuda build %s | cuda available %s | threads %d | uid %d | cwd %s",
              torch.__version__, torch.version.cuda, torch.cuda.is_available(),
              torch.get_num_threads(), os.getuid(), os.getcwd())
+    full_precision()  # before _check_imports imports `model`
     failures = 0
     for group in (_check_imports, _check_tools, _check_assets, _check_models, _check_gpu, _check_tmp):
         try:
