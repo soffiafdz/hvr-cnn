@@ -61,6 +61,23 @@ and `/tmp` must be made writable explicitly with `--tmpfs /tmp`.
 On a Mac with Apple Silicon add `--platform linux/amd64`: the image is built
 for Intel/AMD processors and runs under emulation (slower).
 
+**GPUs.** A container does not see the GPU unless it is passed in, and two
+things must be passed: the device files (`/dev/nvidia0`, `/dev/nvidiactl`,
+...) and the driver's user-space libraries (`libcuda.so` and friends).
+The libraries must match the kernel module *of that machine*, so they
+cannot be inside the image: the image brings PyTorch and the CUDA runtime,
+the host brings the driver. NVIDIA's container toolkit does the passing:
+
+- Podman: `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`
+  writes a list (a "CDI spec") of those files for the installed driver;
+  `--device nvidia.com/gpu=all` applies it. The library names contain the
+  driver version, so regenerate the file after every driver update.
+- Docker: `--gpus all`, through the toolkit's Docker runtime hook.
+- Apptainer: `--nv` (section 4), no toolkit needed.
+
+Then `--device cuda` for hvr-cnn itself: giving the container the GPU and
+using it are separate on purpose.
+
 ## 4. Apptainer / Singularity (clusters)
 
 ```sh
@@ -82,6 +99,7 @@ automatically. We switch that off for reproducibility:
 | `--bind DIR:/tmp`, `--bind DIR:/var/tmp` | real disk space for temporary files | with `--containall`, `/tmp` and `/var/tmp` become small in-memory file systems (the site's "sessiondir max size": 16 MB at BIC); hvr-cnn's intermediate files and N3 overflow it (see 6.3) |
 | `--bind HOST:CONTAINER[:ro]` | like podman's `--volume` | |
 | `--pwd DIR` | like `--workdir` | |
+| `--nv` | mount the host's NVIDIA driver libraries and devices | GPU image only; Apptainer finds the driver itself |
 | `X.sif` or `docker://REF` | a SIF file, or an image pulled and converted on the fly | build the SIF once (`apptainer build hvr-cnn.sif docker://REF`), then reuse it |
 
 ## 5. Building the image (maintainers)
@@ -171,6 +189,36 @@ or is not public. The image actually on the machine was the loaded
 the same terminal (an `export` lasts only for that terminal session). The
 wrapper now says when an image is not on the machine and will be
 downloaded. *Rule:* check which image a command uses (`--print` shows it).
+
+### 6.8 The build prints "Transaction starting" and nothing for 30 minutes
+
+*What happened:* micromamba draws progress bars only when its output is a
+terminal; inside `podman build` it is not, so it prints nothing while it
+downloads and unpacks several GB of CUDA libraries. `ps` showed it at
+1.7 % CPU, but `ps`'s `pcpu` is the average over the process's whole life,
+not what it does now.
+*How to tell:* read the process's I/O counters twice:
+`grep -E '^(rchar|wchar)' /proc/<pid>/io`. `rchar` (bytes read, network
+included) and `wchar` (bytes written) growing = working. Plain `cat` gave
+`Permission denied`: the build runs in rootless podman's user namespace as
+"root" there, which has more privileges than you on the host, and the kernel
+only lets you read the counters of a process with no more privileges than
+yours. `podman unshare <command>` runs the command inside that namespace,
+where it is allowed. *Rule:* watch counters, not averages; a rootless
+container's processes are visible but not always readable from outside.
+
+### 6.9 `nothing provides __glibc >=2.28` when creating the CUDA environment
+
+*What happened:* conda reports the machine's C library version as a
+"virtual package" `__glibc`. The BIC workstation runs Ubuntu 18.04 with
+glibc 2.27; the CUDA packages were compiled against 2.28. The CPU build of
+PyTorch needs only 2.17, which is why that environment installed.
+*Fix:* none on that machine (overriding the check would install programs
+that fail to start). The environment was created on a newer Linux, and the
+old machine runs the **image**, which carries its own glibc (Debian 13);
+only the driver comes from the host. *Rule:* a container decouples the
+software from the host's system libraries, except the kernel and, for
+GPUs, the driver.
 
 ## 7. Exercise: build the podman command one piece at a time
 

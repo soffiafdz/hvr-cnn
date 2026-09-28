@@ -65,6 +65,12 @@ works without network access.
 |---|---|
 | GitHub Container Registry | `ghcr.io/soffiafdz/hvr-cnn:<version>` |
 | Docker Hub (location printed in the paper) | `docker.io/soffiafdz/hvr_cnn:<version>` (0.0.x only until 0.1.0 is released) |
+| GPU variant (NVIDIA, CUDA 12.9) | `ghcr.io/soffiafdz/hvr-cnn:<version>-cuda` |
+
+The `-cuda` image is the same tool with a GPU build of PyTorch. It is about
+three times larger, runs on NVIDIA drivers from version 525 on, and gives
+exactly the same labels as the CPU image (section 7). Without a GPU it
+runs on CPU.
 
 Always name a version. The current one is the release candidate
 `0.1.0-rc1`; there is no `:latest` tag yet. Image for `linux/amd64`; on
@@ -331,8 +337,8 @@ hvr-cnn <command> --help
 | `--model {simple,detailed}` | `simple` | section 1 |
 | `--no-denoise` | denoising on | skip the non-local-means denoising of native input |
 | `--field {1.5,3}` | `3` | scanner field strength of native input; sets the N3 B-spline spacing (50 mm at 3 T, 200 mm at 1.5 T) as in the MNI pipeline |
-| `--device {cpu,cuda,auto}` | `cpu` | `cuda` needs the CUDA image *(planned)* |
-| `--threads N` | what the scheduler allows | honours CPU affinity / cgroups, `SLURM_CPUS_PER_TASK` and `OMP_NUM_THREADS`, never the size of the node |
+| `--device {cpu,cuda,auto}` | `cpu` | `cuda` needs the `-cuda` image and a GPU given to the container (section 8.1); `auto` uses the GPU when one is visible. Results are identical on either (see below) |
+| `--threads N` | what the scheduler allows | CPU threads for the network and for the MINC/ITK tools of the preprocessing. Honours CPU affinity / cgroups, `SLURM_CPUS_PER_TASK` and `OMP_NUM_THREADS`, never the size of the node |
 | `--work-dir DIR` | temporary | intermediate files; removed afterwards unless `--keep-work` |
 | `--keep-work` | off | |
 | `--fail-fast` | off | stop at the first failed scan. Default: continue with the others |
@@ -341,6 +347,14 @@ hvr-cnn <command> --help
 
 Logs go to standard error with timestamps; there are no progress bars, so
 batch logs stay readable.
+
+**CPU and GPU give the same labels.** The network computes in 32-bit
+floating point on both. (Its code asks for 16-bit arithmetic on a GPU, and
+recent NVIDIA GPUs use a reduced-precision format for convolutions by
+default; hvr-cnn switches both off. With them, a few border voxels per
+structure differed from the CPU.) Verified on the public test data and an
+ADNI scan, both models, stereotaxic and raw input: identical labels and
+volumes.
 
 ### `hvr-cnn check OUTDIR [--reference DIR]`
 
@@ -404,9 +418,51 @@ apptainer run -B "$SCRATCH" hvr-cnn_0.1.0.sif \
     run --csv part_$(printf %02d "$SLURM_ARRAY_TASK_ID").csv -o hvr/part_$SLURM_ARRAY_TASK_ID
 ```
 
-Budget roughly one to two minutes per already-stereotaxic scan on 8 cores
-and 1 GB of memory; a raw scan takes about five minutes more for the
-preprocessing (denoising, registration and two bias-field corrections).
+Measured time per scan (8 threads, simple model, QC on):
+
+| input | CPU | GPU (RTX 3070) |
+|---|---|---|
+| already stereotaxic | 75 s | 15-18 s |
+| raw (preprocessing included) | 5-6 min | 4-5 min |
+
+The GPU only runs the network. Preprocessing of raw scans (denoising,
+registration, two bias-field corrections) runs on the CPU either way and
+takes 3.5-4.5 minutes, 4.5 minutes on 2 cores. Peak memory is about
+0.8 GB for either kind of input; 2 GB per process leaves room.
+
+### 8.1 GPUs
+
+The container must be given the GPU, and hvr-cnn told to use it:
+
+| tool | option | host needs |
+|---|---|---|
+| Apptainer / Singularity | `--nv` | the NVIDIA driver |
+| Podman | `--device nvidia.com/gpu=all` | `nvidia-container-toolkit` and `nvidia-ctk cdi generate` (once per driver update) |
+| Docker | `--gpus all` | `nvidia-container-toolkit` |
+| `hvr-cnn-container` | `--gpu` | writes the option above |
+
+then `--device cuda` (fails if no GPU is visible) or `--device auto`.
+`selftest` in the `-cuda` image names the GPU it sees and runs one patch on
+it.
+
+A GPU pays off for already-stereotaxic input (about 4-5 times faster).
+Raw input is dominated by CPU preprocessing, so on a cluster it is usually
+better run as CPU jobs. On clusters that split GPUs into instances (MIG),
+the smallest instance is plenty: the network needs well under 8 GB of GPU
+memory. Example for the Digital Research Alliance of Canada's Rorqual
+(instance names and ratios differ per cluster; not yet tested there):
+
+```sh
+#!/bin/bash
+#SBATCH --gpus=h100_1g.10gb:1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=15G
+#SBATCH --time=03:00:00
+module load apptainer
+apptainer run --nv -B "$SCRATCH" hvr-cnn_<version>-cuda.sif \
+    run --csv "$SCRATCH/study/stx.csv" -o "$SCRATCH/study/hvr" \
+        --device cuda --work-dir "$SLURM_TMPDIR"
+```
 
 ## 9. Quality control
 
@@ -437,6 +493,8 @@ left/right difference far outside that of the rest of your sample.
 | `sheared or non-orthogonal voxel axes` | the NIfTI affine has shear; re-export the scan (e.g. with dcm2niix) |
 | labels shifted or obviously wrong, exit status 0 | the scan was treated as `stx` but is not in ICBM152 2009c space or not intensity-normalised. Use `--input-space native` |
 | very slow on a shared node | pass `--threads` equal to the CPUs you were granted |
+| `--device cuda requested but CUDA is not available` | the CPU image, or the container was not given the GPU (section 8.1). `selftest` shows `cuda build None` for the CPU image, `gpu none visible` when the GPU is not passed in |
+| GPU container fails with a missing `libcuda.so.<version>` (Podman) | the NVIDIA driver was updated after `nvidia-ctk cdi generate`; run it again |
 | Apple Silicon: slow | the image is `linux/amd64` and is emulated |
 | anything else | run `selftest`, then re-run the failing scan with `-v --keep-work --work-dir DIR` and open an issue with the log and `run.json` (no images, please) |
 
@@ -487,7 +545,7 @@ unchanged: same weights, same sampling, same label values.
   from the training pipeline's; treat results from this mode as their own
   series and do not mix them with `stx`/`native` results in one analysis.
 - Volumes are stereotaxic-space volumes (section 6.2). Native-space volumes need the registration transform (section 6.3).
-- CPU only for now.
+- GPU image tested on an RTX 3070 with NVIDIA drivers 535 and 615 (Podman and Singularity); not yet on a cluster or H100.
 
 ## 13. Citing, licence, contact
 
