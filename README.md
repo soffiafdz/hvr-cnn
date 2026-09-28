@@ -14,13 +14,15 @@ hippocampal volume alone (see [Citing](#citing)).
 hvr-cnn is distributed as a container image. It needs no MINC toolkit, no
 Python environment and no network access on the machine that runs it.
 
-> **Status: release candidate `0.1.0-rc1`.** This repository is the rewrite
+> **Status: release candidate `0.1.0-rc2`.** This repository is the rewrite
 > of the container published with the paper (`soffiafdz/hvr_cnn` 0.0.x on
 > Docker Hub). On stereotaxic input it reproduces the published container's
-> segmentations exactly. The image `ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1` is
-> tested with Podman on Linux and on macOS (Apple silicon, emulated), not
-> yet with Apptainer on a cluster. Until 0.1.0 is released, use the
-> published 0.0.2 image for results you intend to publish.
+> segmentations exactly. The image `ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2` is
+> tested with Podman on Linux and on macOS (Apple silicon, emulated); the
+> GPU variant `:0.1.0-rc2-cuda` with Podman and Singularity on NVIDIA GPUs,
+> where it gives the same labels as the CPU image. Neither is tested on a
+> cluster yet. Until 0.1.0 is released, use the published 0.0.2 image for
+> results you intend to publish.
 
 ## What it does
 
@@ -30,7 +32,7 @@ Python environment and no network access on the machine that runs it.
 | Accepted spaces | already stereotaxic (ICBM152 2009c, intensity-normalised), raw / native, or AssemblyNet `mni_t1` output |
 | Models | `simple`: left/right hippocampus and temporal horn. `detailed`: head, body and tail of both, plus amygdala |
 | Output | label volumes in the format of the input, `volumes.tsv` (volumes and HVR per hemisphere), a QC picture per scan (on by default), `run.json` (provenance, per-scan status) |
-| Hardware | CPU. Per scan, measured with the default model and QC: about 2 minutes for an already-stereotaxic scan and 6 for a raw scan (preprocessing included) on a 12-core Linux machine; about 3 and 13 on an Apple-silicon Mac with 6 CPUs given to the Podman VM |
+| Hardware | CPU, or an NVIDIA GPU with the `-cuda` image. Per scan on CPU, measured with the default model and QC: about 2 minutes for an already-stereotaxic scan and 6 for a raw scan (preprocessing included) on a 12-core Linux machine; about 3 and 13 on an Apple-silicon Mac with 6 CPUs given to the Podman VM. With a GPU (RTX 3070), about 15-20 seconds for an already-stereotaxic scan; raw scans gain less, as their preprocessing runs on CPU |
 | Runtimes | Docker, Podman, Apptainer / Singularity (HPC) |
 
 ## Quick start
@@ -38,7 +40,7 @@ Python environment and no network access on the machine that runs it.
 Check an installation (needs no data):
 
 ```sh
-podman run --rm ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1 selftest
+podman run --rm ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2 selftest
 ```
 
 The easiest way to process scans is the wrapper `bin/hvr-cnn-container`,
@@ -48,7 +50,7 @@ the right options for podman, docker or apptainer:
 ```sh
 curl -LO https://raw.githubusercontent.com/soffiafdz/hvr-cnn/main/bin/hvr-cnn-container
 chmod +x hvr-cnn-container
-export HVR_CNN_IMAGE=ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1
+export HVR_CNN_IMAGE=ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2
 ./hvr-cnn-container run -i /data/study/sub-01_T1w.nii.gz -o /data/study/hvr
 ./hvr-cnn-container --print run -i /data/study/sub-01_T1w.nii.gz -o /data/study/hvr   # show the command instead
 ```
@@ -59,7 +61,7 @@ The same run without the wrapper, with rootless Podman:
 podman run --rm --read-only --network none \
     --userns=keep-id --user "$(id -u):$(id -g)" \
     --volume /data/study:/data/study \
-    ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1 \
+    ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2 \
     run -i /data/study/sub-01_T1w.nii.gz -o /data/study/hvr
 ```
 

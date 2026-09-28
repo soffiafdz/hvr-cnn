@@ -73,19 +73,19 @@ exactly the same labels as the CPU image (section 7). Without a GPU it
 runs on CPU.
 
 Always name a version. The current one is the release candidate
-`0.1.0-rc1`; there is no `:latest` tag yet. Image for `linux/amd64`; on
+`0.1.0-rc2`; there is no `:latest` tag yet. Image for `linux/amd64`; on
 Apple Silicon it runs under emulation.
 
 ```sh
-docker pull ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1          # Docker
-podman pull ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1          # Podman
-apptainer pull hvr-cnn.sif docker://ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1   # Apptainer / Singularity
+docker pull ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2          # Docker
+podman pull ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2          # Podman
+apptainer pull hvr-cnn.sif docker://ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2   # Apptainer / Singularity
 ```
 
 Verify the installation. This needs no data and takes a few seconds:
 
 ```sh
-docker run --rm ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1 selftest
+docker run --rm ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2 selftest
 apptainer run hvr-cnn.sif selftest
 ```
 
@@ -108,7 +108,7 @@ then paths **inside** the container.
 ```sh
 cd /path/to/study                      # contains sub-01_T1w.nii.gz
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/data \
-    ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc1 \
+    ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc2 \
     run -i /data/sub-01_T1w.nii.gz -o /data/hvr
 ```
 
