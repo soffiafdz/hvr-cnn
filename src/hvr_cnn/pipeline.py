@@ -194,9 +194,11 @@ def process_scan(scan, args, model, device, outdir, work_root):
 def write_volumes(path, rows):
     if not rows:
         return
-    columns = list(ID_COLUMNS) + [c for c in rows[0] if c not in ID_COLUMNS]
+    # columns from every row: a failed scan's row has only the id columns
+    extra = dict.fromkeys(c for row in rows for c in row if c not in ID_COLUMNS)
+    columns = list(ID_COLUMNS) + list(extra)
     with open(str(path), "w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", extrasaction="ignore")
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         for row in rows:
             out = {}

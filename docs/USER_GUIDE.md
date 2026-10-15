@@ -246,9 +246,10 @@ Left and right are anatomical (the subject's left).
 
 ### 6.2 `volumes.tsv`
 
-Tab-separated, one row per scan. Identification columns (`id`, `subject`,
-`session`, `group`, `model`, `input_space`, `status`) are followed by, for
-each side `L` and `R`:
+Tab-separated with Unix line endings, one row per scan. Identification
+columns (`id`, `subject`, `session`, `group`, `model`, `input_space`,
+`status`) are followed by, for each side `L` and `R`, the columns below. A
+failed scan keeps its row, with only the identification columns filled.
 
 | column | meaning |
 |---|---|
@@ -478,8 +479,8 @@ Reject a scan when the labels are displaced from the hippocampus (failed
 registration or wrong `--input-space`), when the hippocampus is clearly
 truncated or leaks into the amygdala or the parahippocampal gyrus, or when
 the temporal-horn label covers tissue or misses obvious CSF. Numeric hints
-in `volumes.tsv`: `missing_labels` not 0, an HVR of exactly 0 or 1, or a
-left/right difference far outside that of the rest of your sample.
+in `volumes.tsv`: an HVR of exactly 0 or 1, or a left/right difference far
+outside that of the rest of your sample.
 
 ## 10. Troubleshooting
 
