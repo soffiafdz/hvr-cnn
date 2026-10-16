@@ -184,11 +184,25 @@ def process_scan(scan, args, model, device, outdir, work_root):
     info["seconds"] = round(time.time() - started, 1)
     info.setdefault("outputs", [str(seg_path)])
     info["output_format"] = out_fmt
-    if row["missing_labels"]:
-        raise ScanError("segmentation incomplete: %d of %d expected labels absent (output kept for inspection: %s). "
-                        "The input is probably not registered or not intensity-normalised to the template"
-                        % (row["missing_labels"], len(volumes.expected_labels(args.model)), seg_path))
+    note = check_labels(counts, args.model, seg_path)
+    if note:
+        info["warning"] = "; ".join(w for w in (info.get("warning"), note) if w)
+        log.warning("%s: %s", scan.id, note)
     return row, info
+
+
+def check_labels(counts, model, seg_path):
+    """Raise ScanError when a whole structure is absent; return a warning when
+    only some of its parts are, else None."""
+    empty = volumes.empty_structures(counts, model)
+    if empty:
+        raise ScanError("segmentation incomplete: %s empty (output kept for inspection: %s). "
+                        "The input is probably not registered or not intensity-normalised to the template"
+                        % (", ".join(empty), seg_path))
+    absent = sorted(volumes.expected_labels(model) - set(counts))
+    if absent:
+        return "labels %s absent: their part volumes are 0; check the QC picture" % ", ".join(map(str, absent))
+    return None
 
 
 def write_volumes(path, rows):

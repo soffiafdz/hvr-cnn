@@ -37,6 +37,16 @@ def expected_labels(model: str) -> frozenset[int]:
     )
 
 
+def empty_structures(counts: dict[int, int], model: str) -> list[str]:
+    """`<side>_<structure>` names none of whose labels are present."""
+    return [
+        f"{side}_{structure}"
+        for side in SIDES
+        for structure, values in _model(model)[side].items()
+        if not any(counts.get(v, 0) for v in values)
+    ]
+
+
 def count_labels(seg: np.ndarray) -> dict[int, int]:
     """Voxel count per non-zero label value."""
     seg = np.asarray(seg)

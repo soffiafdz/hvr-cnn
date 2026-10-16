@@ -104,3 +104,13 @@ def test_hvr_edges():
     assert math.isnan(volumes.hvr(0, 0))
     with pytest.raises(ValueError):
         volumes.hvr(-1, 2)
+
+
+def test_empty_structures():
+    assert volumes.empty_structures(BASELINE_DETAILED, "detailed") == []
+    no_tail = {k: v for k, v in BASELINE_DETAILED.items() if k != 111}
+    assert volumes.empty_structures(no_tail, "detailed") == []
+    no_left_hc = {k: v for k, v in BASELINE_DETAILED.items() if k not in (111, 112, 113)}
+    assert volumes.empty_structures(no_left_hc, "detailed") == ["L_HC"]
+    assert volumes.empty_structures({11: 1, 12: 1, 22: 1}, "simple") == ["R_HC"]
+    assert volumes.empty_structures({}, "simple") == ["L_HC", "L_VC", "R_HC", "R_VC"]

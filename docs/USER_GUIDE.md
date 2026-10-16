@@ -258,7 +258,7 @@ failed scan keeps its row, with only the identification columns filled.
 | `<side>_HVR` | `HC / (HC + VC)`; empty when both are zero |
 | `<side>_AMY_mm3` | amygdala (`detailed` only) |
 | `<side>_HC_head_mm3`, `..._body_mm3`, `..._tail_mm3`, same for `VC` | parts (`detailed` only) |
-| `missing_labels` | expected labels that are absent. Any value but 0 makes the scan `failed` (the label file is kept for inspection) |
+| `missing_labels` | expected labels that are absent. When only some parts of a structure are absent (`detailed`), the scan stays `ok`, those parts are 0 and the log and `run.json` carry a warning. When all labels of a structure on one side are absent, the scan is `failed` (the label file is kept for inspection) |
 
 **Stereotaxic volumes are head-size normalised.** Linear registration to
 the template scales every head to the template's size, so volumes measured
@@ -479,8 +479,8 @@ Reject a scan when the labels are displaced from the hippocampus (failed
 registration or wrong `--input-space`), when the hippocampus is clearly
 truncated or leaks into the amygdala or the parahippocampal gyrus, or when
 the temporal-horn label covers tissue or misses obvious CSF. Numeric hints
-in `volumes.tsv`: an HVR of exactly 0 or 1, or a left/right difference far
-outside that of the rest of your sample.
+in `volumes.tsv`: `missing_labels` not 0, an HVR of exactly 0 or 1, or a
+left/right difference far outside that of the rest of your sample.
 
 ## 10. Troubleshooting
 
