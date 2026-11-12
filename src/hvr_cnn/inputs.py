@@ -13,7 +13,7 @@ from typing import NamedTuple, Optional
 
 EXTENSIONS = (".mnc", ".mnc.gz", ".nii", ".nii.gz")
 CSV_REQUIRED = "input"
-CSV_OPTIONAL = ("subject", "session", "group")
+CSV_OPTIONAL = ("subject", "session", "group", "xfm")
 
 
 class InputError(ValueError):
@@ -26,6 +26,7 @@ class Scan(NamedTuple):
     subject: Optional[str] = None
     session: Optional[str] = None
     group: Optional[str] = None
+    xfm: Optional[Path] = None  # native -> stx transform of a stereotaxic input
 
 
 def strip_extension(name):
@@ -62,7 +63,7 @@ def scan_id(path, subject=None, session=None):
 def from_paths(paths):
     # absolute from here on, so logs, volumes.tsv and run.json name the exact file
     # (os.path.abspath normalises "." and ".." but does not follow symlinks)
-    return _validated((Path(os.path.abspath(p)), None, None, None) for p in paths)
+    return _validated((Path(os.path.abspath(p)), None, None, None, None) for p in paths)
 
 
 def from_csv(csv_path):
@@ -89,30 +90,50 @@ def from_csv(csv_path):
             value = (row.get(CSV_REQUIRED) or "").strip()
             if not value:
                 raise InputError("%s line %d: empty '%s'" % (csv_path, line, CSV_REQUIRED))
-            path = Path(value)
-            if not path.is_absolute():
-                path = Path(os.path.abspath(csv_path.parent / path))  # also resolves "../"
             extra = {k: (row.get(k) or "").strip() or None for k in CSV_OPTIONAL}
-            rows.append((path, extra["subject"], extra["session"], extra["group"]))
+            xfm = extra["xfm"] and _from_table(csv_path, extra["xfm"])
+            rows.append((_from_table(csv_path, value), extra["subject"], extra["session"], extra["group"], xfm))
     if not rows:
         raise InputError("%s: no rows" % csv_path)
     return _validated(rows)
 
 
+def _from_table(csv_path, value):
+    """A path from the table, absolute; relative entries are relative to the table."""
+    path = Path(value)
+    if not path.is_absolute():
+        path = Path(os.path.abspath(csv_path.parent / path))  # also resolves "../"
+    return path
+
+
+def _file_problem(path):
+    if not path.is_file():
+        return "%s: no such file" % path
+    if not os.access(str(path), os.R_OK):
+        return "%s: not readable" % path
+    return None
+
+
 def _validated(rows):
-    """Build the scans from (path, subject, session, group) rows; report every problem at once."""
+    """Build the scans from (path, subject, session, group, xfm) rows; report every problem at once."""
     scans, problems = [], []
-    for path, subject, session, group in rows:
+    for path, subject, session, group, xfm in rows:
         try:
             image_format(path)
-            scans.append(Scan(scan_id(path, subject, session), path, subject, session, group))
+            scans.append(Scan(scan_id(path, subject, session), path, subject, session, group, xfm))
         except InputError as exc:
             problems.append(str(exc))
             continue
-        if not path.is_file():
-            problems.append("%s: no such file" % path)
-        elif not os.access(str(path), os.R_OK):
-            problems.append("%s: not readable" % path)
+        problem = _file_problem(path)
+        if problem:
+            problems.append(problem)
+        if xfm is not None:
+            if not xfm.name.lower().endswith(".xfm"):
+                problems.append("%s: the 'xfm' column needs a MINC linear transform (.xfm)" % xfm)
+            else:
+                problem = _file_problem(xfm)
+                if problem:
+                    problems.append(problem)
     for ident, n in Counter(s.id for s in scans).items():
         if n > 1:
             problems.append(

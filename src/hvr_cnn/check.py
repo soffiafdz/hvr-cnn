@@ -5,7 +5,8 @@ recorded as `ok` in `run.json`: the label file exists and holds exactly the
 model's label set, HVR is within (0, 1), NIfTI outputs sit on the input's
 grid (when the input is reachable), and, with `--reference`, that the
 labels match those of a reference run (Dice per label) and the volumes
-agree within a tolerance.
+agree within a tolerance. Runs written by 0.1.0-rc1/rc2 (stereotaxic
+volumes named `_mm3`) are read under the current names.
 """
 
 import csv
@@ -136,11 +137,21 @@ def check_run(outdir, reference=None):
             worst = min(dice.values())
             yield worst >= DICE_MIN, "%s: Dice vs reference min %.4f (%s)" % (
                 sid, worst, " ".join("%d:%.3f" % kv for kv in dice.items()))
-            ref_row = ref_rows.get(sid, {})
-            for key in (k for k in row if k.endswith(("_mm3", "_vox"))):
+            # both runs under the current column names, so 0.1.0-rc1/rc2 runs still compare
+            ref_row = volumes.current_names(ref_rows.get(sid, {}))
+            current = volumes.current_names(row)
+            for key in (k for k in current if k.endswith((volumes.STX, volumes.NATIVE, volumes.VOX))):
                 try:
-                    v, r = float(row[key]), float(ref_row[key])
-                except (KeyError, ValueError):
+                    v = float(current[key])
+                except ValueError:  # empty: native volumes not computed for this scan
+                    continue
+                if key not in ref_row:
+                    if not key.endswith(volumes.NATIVE):  # a reference run without native volumes is fine
+                        yield False, "%s: %s not in the reference volumes.tsv" % (sid, key)
+                    continue
+                try:
+                    r = float(ref_row[key])
+                except ValueError:
                     continue
                 rel = abs(v - r) / r if r else (0.0 if v == 0 else math.inf)
                 yield rel <= VOLUME_TOLERANCE, "%s: %s %g vs reference %g (%.2f%%)" % (sid, key, v, r, 100 * rel)

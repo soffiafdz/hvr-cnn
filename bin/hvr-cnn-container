@@ -84,15 +84,17 @@ add_ro() { # an input file: its directory is mounted read-only; it must exist
 }
 add_rw() { rw_dirs+=("$(abspath "$1")"); }  # created only after every input checks out
 
-csv_inputs() { # print the 'input' column of a CSV/TSV table, relative to the table
+csv_inputs() { # print the 'input' and 'xfm' columns of a CSV/TSV table, relative to the table
   local table=$1 dir; dir=$(dirname "$(abspath "$table")")
   awk -v dir="$dir" '
+    function show(p) { if (p == "") return; if (substr(p, 1, 1) != "/") p = dir "/" p; print p }
     NR == 1 { sub(/^\xef\xbb\xbf/, "")                       # Excel byte-order mark
               fs = (index($0, "\t") ? "\t" : (index($0, ";") ? ";" : ","))
-              n = split($0, h, fs); for (i = 1; i <= n; i++) if (h[i] == "input") col = i
+              n = split($0, h, fs)
+              for (i = 1; i <= n; i++) { if (h[i] == "input") col = i; if (h[i] == "xfm") xcol = i }
               next }
-    col { split($0, f, fs); p = f[col]; if (p == "") next
-          if (substr(p, 1, 1) != "/") p = dir "/" p; print p }' FS='\n' "$table"
+    col { split($0, f, fs); if (f[col] == "") next
+          show(f[col]); if (xcol) show(f[xcol]) }' FS='\n' "$table"
 }
 
 args=("$@") i=0 command=${args[0]}

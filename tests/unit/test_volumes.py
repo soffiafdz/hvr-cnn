@@ -46,8 +46,8 @@ def test_count_labels_rejects_non_integer():
 
 def test_simple_matches_old_code():
     row = volumes.summarise(BASELINE_SIMPLE, "simple")
-    assert (row["L_HC_mm3"], row["L_VC_mm3"]) == (4716, 1477)
-    assert (row["R_HC_mm3"], row["R_VC_mm3"]) == (4507, 1436)
+    assert (row["L_HC_mm3_stx"], row["L_VC_mm3_stx"]) == (4716, 1477)
+    assert (row["R_HC_mm3_stx"], row["R_VC_mm3_stx"]) == (4507, 1436)
     # values written by the old container for the same segmentation
     assert row["L_HVR"] == pytest.approx(0.7615049249152269, abs=1e-15)
     assert row["R_HVR"] == pytest.approx(0.7583711930001683, abs=1e-15)
@@ -57,14 +57,14 @@ def test_simple_matches_old_code():
 def test_detailed_sums_sublabels():
     # the case the old container crashed on
     row = volumes.summarise(BASELINE_DETAILED, "detailed")
-    assert (row["L_HC_mm3"], row["L_VC_mm3"], row["L_AMY_mm3"]) == (4800, 1413, 1028)
-    assert (row["R_HC_mm3"], row["R_VC_mm3"], row["R_AMY_mm3"]) == (4622, 1385, 1219)
+    assert (row["L_HC_mm3_stx"], row["L_VC_mm3_stx"], row["L_AMY_mm3_stx"]) == (4800, 1413, 1028)
+    assert (row["R_HC_mm3_stx"], row["R_VC_mm3_stx"], row["R_AMY_mm3_stx"]) == (4622, 1385, 1219)
     assert row["L_HVR"] == pytest.approx(4800 / 6213)
     assert row["R_HVR"] == pytest.approx(4622 / 6007)
     # x11 = tail (posterior), x13 = head (anterior, next to the amygdala)
-    assert (row["L_HC_tail_mm3"], row["L_HC_body_mm3"], row["L_HC_head_mm3"]) == (772, 1775, 2253)
-    assert (row["L_VC_tail_mm3"], row["L_VC_body_mm3"], row["L_VC_head_mm3"]) == (228, 577, 608)
-    assert "L_AMY_head_vox" not in row
+    assert (row["L_HC_tail_mm3_stx"], row["L_HC_body_mm3_stx"], row["L_HC_head_mm3_stx"]) == (772, 1775, 2253)
+    assert (row["L_VC_tail_mm3_stx"], row["L_VC_body_mm3_stx"], row["L_VC_head_mm3_stx"]) == (228, 577, 608)
+    assert "L_AMY_head_mm3_stx" not in row
 
 
 def test_amygdala_not_in_hvr():
@@ -81,19 +81,19 @@ def test_wrong_model_is_an_error_not_zero_volumes():
         volumes.summarise(BASELINE_DETAILED, "simple")
 
 
-def test_vox_only_when_it_differs_from_mm3():
+def test_vox_only_when_it_differs_from_mm3_stx():
     row = volumes.summarise(BASELINE_SIMPLE, "simple", voxel_volume_mm3=0.5)
-    assert row["L_HC_mm3"] == 2358.0
-    assert row["L_HC_vox"] == 4716
+    assert row["L_HC_mm3_stx"] == 2358.0
+    assert row["L_HC_vox_stx"] == 4716
     unit = volumes.summarise(BASELINE_SIMPLE, "simple")
-    assert not any(k.endswith("_vox") for k in unit)
-    assert unit["L_HC_mm3"] == 4716
+    assert not any(k.endswith("_vox_stx") for k in unit)
+    assert unit["L_HC_mm3_stx"] == 4716
     assert len(unit) == 7  # 2 sides x (HC, VC, HVR) + missing_labels
 
 
 def test_empty_segmentation_gives_nan_not_crash():
     row = volumes.summarise({}, "simple")
-    assert row["L_HC_mm3"] == 0
+    assert row["L_HC_mm3_stx"] == 0
     assert math.isnan(row["L_HVR"]) and math.isnan(row["R_HVR"])
     assert row["missing_labels"] == 4
 
@@ -114,3 +114,64 @@ def test_empty_structures():
     assert volumes.empty_structures(no_left_hc, "detailed") == ["L_HC"]
     assert volumes.empty_structures({11: 1, 12: 1, 22: 1}, "simple") == ["R_HC"]
     assert volumes.empty_structures({}, "simple") == ["L_HC", "L_VC", "R_HC", "R_VC"]
+
+
+def test_add_native_divides_by_the_scale_factor():
+    row = volumes.add_native(volumes.summarise(BASELINE_SIMPLE, "simple"), 0.8)
+    assert row["scale_factor"] == 0.8
+    assert row["L_HC_mm3_native"] == pytest.approx(4716 / 0.8)
+    assert row["R_VC_mm3_native"] == pytest.approx(1436 / 0.8)
+    # one scaling per scan cancels in the ratio: HVR is the same in both spaces
+    native_hvr = row["L_HC_mm3_native"] / (row["L_HC_mm3_native"] + row["L_VC_mm3_native"])
+    assert native_hvr == pytest.approx(row["L_HVR"])
+
+
+def test_add_native_covers_parts_and_amygdala():
+    row = volumes.add_native(volumes.summarise(BASELINE_DETAILED, "detailed"), 2.0)
+    assert row["L_HC_head_mm3_native"] == 2253 / 2.0
+    assert row["R_AMY_mm3_native"] == 1219 / 2.0
+    assert not any(k.endswith("_HVR_native") for k in row)
+
+
+def test_add_native_without_transform_leaves_empty_columns():
+    row = volumes.add_native(volumes.summarise(BASELINE_SIMPLE, "simple"), None)
+    assert math.isnan(row["scale_factor"])
+    natives = [k for k in row if k.endswith("_mm3_native")]
+    assert len(natives) == 4 and all(math.isnan(row[k]) for k in natives)
+    assert row["L_HC_mm3_stx"] == 4716  # stereotaxic volumes untouched
+
+
+@pytest.mark.parametrize("bad", [0, -1.0, math.nan, math.inf])
+def test_add_native_rejects_impossible_scale_factor(bad):
+    with pytest.raises(ValueError, match="scale factor"):
+        volumes.add_native(volumes.summarise(BASELINE_SIMPLE, "simple"), bad)
+
+
+def test_columns_simple():
+    assert volumes.columns("simple") == [
+        "L_HC_mm3_stx", "L_VC_mm3_stx", "L_HVR", "R_HC_mm3_stx", "R_VC_mm3_stx", "R_HVR",
+        "missing_labels", "scale_factor",
+        "L_HC_mm3_native", "L_VC_mm3_native", "R_HC_mm3_native", "R_VC_mm3_native",
+    ]
+
+
+@pytest.mark.parametrize("model,counts", [("simple", BASELINE_SIMPLE), ("detailed", BASELINE_DETAILED)])
+def test_columns_match_a_full_row_in_order(model, counts):
+    for scale in (1.1, None):
+        row = volumes.add_native(volumes.summarise(counts, model), scale)
+        assert list(row) == volumes.columns(model)
+
+
+def test_every_volume_column_names_its_space():
+    for model in volumes.LABELS:
+        for col in volumes.columns(model):
+            if "_mm3" in col:
+                assert col.endswith(("_mm3_stx", "_mm3_native")), col
+
+
+def test_current_names_maps_rc_columns():
+    old = {"id": "s1", "L_HC_mm3": 1, "L_HC_head_mm3": 2, "L_HC_vox": 3, "L_HC_mm3_native": 4, "L_HVR": 0.5}
+    assert volumes.current_names(old) == {"id": "s1", "L_HC_mm3_stx": 1, "L_HC_head_mm3_stx": 2,
+                                          "L_HC_vox_stx": 3, "L_HC_mm3_native": 4, "L_HVR": 0.5}
+    new = volumes.add_native(volumes.summarise(BASELINE_SIMPLE, "simple"), 0.9)
+    assert volumes.current_names(new) == new

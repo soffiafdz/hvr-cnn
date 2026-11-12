@@ -167,6 +167,7 @@ sub-01/ses-m12/anat/sub-01_ses-m12_T1w.nii.gz,sub-01,ses-m12,CN
 | `subject` | optional | identifier becomes `<subject>` or `<subject>_<session>` |
 | `session` | optional | |
 | `group` | optional | copied to `volumes.tsv`, otherwise unused |
+| `xfm` | optional | the native -> stereotaxic linear transform (MINC `.xfm`) of a stereotaxic input, when it is not next to the scan; gives the native volumes (section 6.2). Relative paths are relative to the table. Ignored, with a warning, for native input, which hvr-cnn registers itself |
 
 Other columns are ignored. Characters other than letters, digits, `.`, `_`
 and `-` in identifiers are replaced by `-`.
@@ -246,31 +247,67 @@ Left and right are anatomical (the subject's left).
 
 ### 6.2 `volumes.tsv`
 
-Tab-separated with Unix line endings, one row per scan. Identification
-columns (`id`, `subject`, `session`, `group`, `model`, `input_space`,
-`status`) are followed by, for each side `L` and `R`, the columns below. A
-failed scan keeps its row, with only the identification columns filled.
+Tab-separated with Unix line endings, one row per scan. Every scan of a run
+has the same columns; a value that was not computed is an empty cell, and a
+failed scan keeps its row with only the identification columns filled.
+Every volume column names its space: `_mm3_stx` is measured on the
+stereotaxic grid the network segments, `_mm3_native` in the subject's own
+head.
+
+Identification columns: `id`, `subject`, `session`, `group`, `model`,
+`input_space` (the space the scan was processed as, including the decision
+of `auto`), `status`. Then, for each side `L` and `R`:
 
 | column | meaning |
 |---|---|
-| `<side>_HC_mm3`, `<side>_VC_mm3` | volume in mm^3 of stereotaxic space (on the 1 mm grid this equals the voxel count) |
-| `<side>_HC_vox`, `<side>_VC_vox` | raw voxel counts, present only when the grid is not 1 mm |
-| `<side>_HVR` | `HC / (HC + VC)`; empty when both are zero |
-| `<side>_AMY_mm3` | amygdala (`detailed` only) |
-| `<side>_HC_head_mm3`, `..._body_mm3`, `..._tail_mm3`, same for `VC` | parts (`detailed` only) |
-| `missing_labels` | expected labels that are absent. When only some parts of a structure are absent (`detailed`), the scan stays `ok`, those parts are 0 and the log and `run.json` carry a warning. When all labels of a structure on one side are absent, the scan is `failed` (the label file is kept for inspection) |
+| `<side>_HC_mm3_stx`, `<side>_VC_mm3_stx` | volume in mm^3 on the stereotaxic grid (on the 1 mm grid this equals the voxel count) |
+| `<side>_HC_head_mm3_stx`, `..._body_mm3_stx`, `..._tail_mm3_stx`, same for `VC` | parts (`detailed` only) |
+| `<side>_AMY_mm3_stx` | amygdala (`detailed` only) |
+| `<side>_HVR` | `HC / (HC + VC)`, the same in both spaces; empty when both are zero |
+| `<side>_HC_vox_stx`, ... | raw voxel counts, present only when the grid is not 1 mm |
 
-**Stereotaxic volumes are head-size normalised.** Linear registration to
-the template scales every head to the template's size, so volumes measured
-in stereotaxic space are already corrected for head size by that scaling.
-This is what the paper used. HVR is a ratio of two such volumes and does
-not depend on the scaling at all. For `native` input the table also has
-`<side>_<structure>_mm3_native`: the stereotaxic volume divided by the
-volume scaling of the registration (the product of its three scale
-factors), i.e. the volume in the subject's own head. `run.json` records
-the scale factor. Stereotaxic input gets the same columns when the
-longitudinal pipeline's transform is found next to it (`stx2_<id>_t1.mnc`
--> `stx2_<id>_t1.xfm`).
+and for the scan:
+
+| column | meaning |
+|---|---|
+| `missing_labels` | expected labels that are absent. When only some parts of a structure are absent (`detailed`), the scan stays `ok`, those parts are 0 and the log and `run.json` carry a warning. When all labels of a structure on one side are absent, the scan is `failed` (the label file is kept for inspection) |
+| `scale_factor` | volume scaling of the native -> stereotaxic linear registration, the product of its three scales: stereotaxic volume = native volume x `scale_factor`. Empty when no transform is known |
+| `<side>_<structure>[_<part>]_mm3_native` | every `_mm3_stx` volume divided by `scale_factor`: the volume in the subject's own head. Empty when no transform is known |
+
+**Where the scale factor comes from.** For `native` input, hvr-cnn's own
+registration. For `stx` input, the transform of the pipeline that made the
+scan: the `xfm` column of `--csv` (section 4.2), otherwise the MNI
+longitudinal pipeline's file next to the input (`stx2_<id>_t1.mnc` ->
+`stx2_<id>_t1.xfm`). AssemblyNet output carries no transform hvr-cnn can
+read; one given in the `xfm` column must map native space to AssemblyNet's
+MNI grid. Without a transform the native columns stay empty, the scan's
+record in `run.json` says `"native_volumes": "not computed: no transform"`,
+and the run ends with a warning that counts those scans. A scale factor
+from elsewhere (for example a pipeline's table of `ScaleFactor` per scan)
+converts the same way: native = stereotaxic / scale factor.
+
+**Head size.** Stereotaxic volumes are not a neutral head-size correction.
+The linear registration scales each head to the template, and the
+stereotaxic volume is the native volume multiplied by that one factor per
+scan: a proportional adjustment by a registration-based estimate of head
+size, much like dividing by intracranial volume (ICV). In 27,680 UK Biobank
+participants, the direction of the hippocampal sex difference changed with
+the head-size method: residualising native volumes on ICV served as the
+benchmark, proportional adjustment can over- or under-correct, and
+stereotaxic volumes kept a residual correlation with ICV
+(Fernandez-Lozano & Collins, 2026; section 13). So, for comparisons between
+groups that differ in head size, sex above all:
+
+- use the native volumes (`*_mm3_native`) residualised on ICV, or
+- use HVR, which needs no head-size adjustment: it is a ratio of two volumes
+  of the same head, so any one scaling cancels. It is not entirely free of
+  head size (in UK Biobank it correlated with ICV at r = -0.25, through the
+  ventricles, and its sex difference shrank by 65% in an ICV-matched sample
+  without disappearing), but no adjustment is applied to it.
+
+hvr-cnn computes no ICV, and the scale factor is not an ICV. Take ICV from
+your preprocessing (the UK Biobank paper used AssemblyNet's) and use one
+source throughout a study.
 
 A segmentation containing a label that does not belong to the chosen model
 is an error for that scan, never a row of zeros.
@@ -284,8 +321,8 @@ use the model that the reference values you compare against were made with:
 
 | reference | model | volumes |
 |---|---|---|
-| Fernandez-Lozano et al., HBM 2025 (ADNI) | `simple` (default) | stereotaxic (`*_mm3`) |
-| UK Biobank normative models (in preparation) | `detailed`, HC and VC as the sum of head, body and tail | native space: stereotaxic volume divided by the scale factor of the registration (`*_mm3_native`); HVR is the same in both spaces. The UKBB images were preprocessed with the MNI longitudinal pipeline (`stx2`); for exact comparability run that pipeline and give hvr-cnn its `stx2_*_t1.mnc` (see below) |
+| Fernandez-Lozano et al., HBM 2025 (ADNI) | `simple` (default) | stereotaxic (`*_mm3_stx`) |
+| Fernandez-Lozano & Collins, bioRxiv 2026 (UK Biobank normative centiles) | `detailed`, HC and VC as the sum of head, body and tail | native (`*_mm3_native`), with ICV as a covariate, as in the norms; HVR is the same in both spaces. The UKBB images were preprocessed with the MNI longitudinal pipeline (`stx2`); for exact comparability run that pipeline and give hvr-cnn its `stx2_*_t1.mnc` (see below) |
 
 **Reproducing the UK Biobank processing exactly.** The UKBB norms were made
 from `stx2_*_t1.mnc` volumes of the MNI longitudinal pipeline
@@ -295,16 +332,20 @@ linear template across visits). hvr-cnn's `native` mode is a simpler,
 cross-sectional approximation of that preprocessing. For results on the
 same footing as the norms, run the longitudinal pipeline (it has its own
 container) and pass its `stx2_*_t1.mnc` files to `hvr-cnn run --model
-detailed`: when the matching `stx2_*_t1.xfm` sits next to each file,
-`*_mm3_native` is computed from it exactly as for the norms. On UKBB
+detailed`: when the matching `stx2_*_t1.xfm` sits next to each file (or is
+given in the `xfm` column of `--csv`), `*_mm3_native` is computed from it
+exactly as for the norms. On UKBB
 `stx2` volumes this reproduces the UKBB segmentations voxel for voxel.
 
 ### 6.4 `run.json`
 
 Version of hvr-cnn and of PyTorch, image digest when known, device,
 threads, the full command line, and for every scan: status (`ok`,
-`skipped`, `failed`), the decided input space, timing, warnings and, on
-failure, the error. Keep it with your results: it is the provenance record.
+`skipped`, `failed`), the decided input space, timing, `warnings` (a list),
+`native_volumes` (`computed`, or `not computed: no transform`), the
+`scale_factor` when known and, for stereotaxic input, the transform it came
+from (`scale_xfm`), and, on failure, the error. Keep it with your results:
+it is the provenance record.
 
 ## 7. Command reference
 
@@ -527,6 +568,24 @@ answered with the equivalent new options instead of a cryptic error.
 Numerical results of the `simple` model on already-stereotaxic input are
 unchanged: same weights, same sampling, same label values.
 
+**From 0.1.0-rc1 or rc2.** The values are unchanged; some names and the
+table layout are not (details in `CHANGELOG.md`):
+
+| rc1, rc2 | now |
+|---|---|
+| `<side>_<structure>[_<part>]_mm3` (stereotaxic) | `..._mm3_stx` |
+| `..._vox` | `..._vox_stx` |
+| `..._mm3_native` only when a transform was found; the columns of the whole table set by its first scan | always present, empty when no transform is known; new `scale_factor` column |
+| `input_space` always `stx` | the space the scan was processed as |
+| `run.json`: `warning`, one string | `warnings`, a list; new `native_volumes` |
+
+`hvr-cnn check --reference` reads rc1/rc2 runs under the new names. To
+rename the columns of an old table:
+
+```sh
+awk 'BEGIN { FS = OFS = "\t" } NR == 1 { for (i = 1; i <= NF; i++) if ($i ~ /_(mm3|vox)$/) $i = $i "_stx" } 1' volumes.tsv > volumes_renamed.tsv
+```
+
 ## 12. Limitations
 
 - The network was trained on T1w scans of adults, mostly older adults,
@@ -545,13 +604,21 @@ unchanged: same weights, same sampling, same label values.
   AssemblyNet's preprocessing (SANLM, its own N4 and normalisation) differs
   from the training pipeline's; treat results from this mode as their own
   series and do not mix them with `stx`/`native` results in one analysis.
-- Volumes are stereotaxic-space volumes (section 6.2). Native-space volumes need the registration transform (section 6.3).
+- Native volumes need the native -> stereotaxic transform; without it only
+  stereotaxic volumes and HVR are filled in (section 6.2). hvr-cnn computes
+  no intracranial volume.
 - GPU image tested on an RTX 3070 with NVIDIA drivers 535 and 615 (Podman and Singularity); not yet on a cluster or H100.
 
 ## 13. Citing, licence, contact
 
 Please cite Fernandez-Lozano et al., *Human Brain Mapping* 2025; 46:
 e70265, https://doi.org/10.1002/hbm.70265.
+
+For head-size adjustment, sex differences and the UK Biobank normative
+centiles: Fernandez-Lozano S, Collins DL. Hippocampal-to-Ventricle Ratio
+as a Head-Size-Independent Biomarker: Sex Differences and Cognitive
+Associations in 27,680 UK Biobank Participants. *bioRxiv* 2026,
+https://doi.org/10.64898/2026.04.13.718285.
 
 GPL-3.0; see `LICENSE` and `NOTICE` for third-party components and the
 terms of the weights. Questions and bug reports:

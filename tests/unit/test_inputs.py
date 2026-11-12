@@ -147,3 +147,28 @@ def test_csv_dotdot_normalised(tmp_path):
     (tmp_path / "tables").mkdir()
     (tmp_path / "tables" / "t.csv").write_text("input\n../scans/a.mnc\n")
     assert str(inputs.from_csv(tmp_path / "tables" / "t.csv")[0].path) == str(tmp_path / "scans" / "a.mnc")
+
+
+def test_csv_xfm_column(tmp_path):
+    touch(tmp_path / "scans" / "stx2_s1_t1.mnc")
+    touch(tmp_path / "xfms" / "s1.xfm")
+    touch(tmp_path / "scans" / "stx2_s2_t1.mnc")
+    (tmp_path / "t.csv").write_text("input,xfm\nscans/stx2_s1_t1.mnc,xfms/s1.xfm\nscans/stx2_s2_t1.mnc,\n")
+    scans = inputs.from_csv(tmp_path / "t.csv")
+    assert scans[0].xfm == tmp_path / "xfms" / "s1.xfm"      # relative to the table, like input
+    assert scans[1].xfm is None
+
+
+def test_csv_xfm_problems_reported_up_front(tmp_path):
+    touch(tmp_path / "a.mnc")
+    touch(tmp_path / "b.mnc")
+    touch(tmp_path / "b.txt")
+    (tmp_path / "t.csv").write_text("input,xfm\na.mnc,missing.xfm\nb.mnc,b.txt\n")
+    with pytest.raises(InputError) as exc:
+        inputs.from_csv(tmp_path / "t.csv")
+    text = str(exc.value)
+    assert "2 problem(s)" in text and "missing.xfm: no such file" in text and "needs a MINC linear transform" in text
+
+
+def test_paths_have_no_xfm(tmp_path):
+    assert inputs.from_paths([str(touch(tmp_path / "a.mnc"))])[0].xfm is None

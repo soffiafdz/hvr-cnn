@@ -56,6 +56,24 @@ def _count_labels(path):
     return volumes.count_labels(data)
 
 
+def _warn(info, scan_id, message):
+    """Log a warning and keep it in the scan's run.json record."""
+    info.setdefault("warnings", []).append(message)
+    log.warning("%s: %s", scan_id, message)
+
+
+def _given_xfm(scan):
+    """The native -> stx transform of a stereotaxic input: the `xfm` column of
+    --csv, else the longitudinal pipeline's file next to the input, else None."""
+    return scan.xfm or preprocess.stx_xfm_for(scan.path)
+
+
+def _use_xfm(info, scan_id, xfm):
+    info["scale_factor"] = preprocess.xfm_scale_factor(xfm)
+    info["scale_xfm"] = str(xfm)
+    log.info("%s: native volumes from %s (scale factor %.4f)", scan_id, Path(xfm).name, info["scale_factor"])
+
+
 def process_scan(scan, args, model, device, outdir, work_root):
     """Segment one scan. Returns (row for volumes.tsv, info for run.json)."""
     started = time.time()
@@ -70,9 +88,9 @@ def process_scan(scan, args, model, device, outdir, work_root):
     if seg_path.exists() and not args.overwrite:
         info.update(status="skipped", reason="output exists (use --overwrite)")
         counts = _count_labels(seg_path)
-        saved = next(scan_dir.glob("*_to-stx.xfm"), None) or preprocess.stx_xfm_for(scan.path)
+        saved = next(scan_dir.glob("*_to-stx.xfm"), None) or _given_xfm(scan)
         if saved is not None:
-            info["scale_factor"] = preprocess.xfm_scale_factor(saved)
+            _use_xfm(info, scan.id, saved)
     else:
         work = Path(work_root) / scan.id
         work.mkdir(parents=True, exist_ok=True)
@@ -112,6 +130,8 @@ def process_scan(scan, args, model, device, outdir, work_root):
             info["intensity_expression"] = expression
             t1 = normalised
         if space == "native":
+            if scan.xfm is not None:
+                _warn(info, scan.id, "xfm column ignored: native input is registered by hvr-cnn itself")
             native_t1 = t1
             xfm = work / ("%s_to-stx.xfm" % scan.id)
             t1 = work / ("%s_stx.mnc" % scan.id)
@@ -125,13 +145,10 @@ def process_scan(scan, args, model, device, outdir, work_root):
             info["scale_factor"] = preprocess.xfm_scale_factor(xfm)
             log.info("%s: preprocessed in %.0fs, stx scale factor %.3f", scan.id, info["preprocessing_seconds"],
                      info["scale_factor"])
-        if space == "stx":
-            sidecar = preprocess.stx_xfm_for(scan.path)
-            if sidecar is not None:
-                info["scale_factor"] = preprocess.xfm_scale_factor(sidecar)
-                info["scale_xfm"] = str(sidecar)
-                log.info("%s: native volumes from %s (scale factor %.4f)", scan.id, sidecar.name,
-                         info["scale_factor"])
+        else:
+            given = _given_xfm(scan)
+            if given is not None:
+                _use_xfm(info, scan.id, given)
         try:
             segment.check_stx_geometry(t1)
         except segment.GeometryError as exc:
@@ -139,9 +156,8 @@ def process_scan(scan, args, model, device, outdir, work_root):
         p90 = segment.intensity_p90(t1)
         lo, hi = segment.INTENSITY_P90_RANGE
         if not lo <= p90 <= hi:
-            info["warning"] = ("intensity p90 in the reference box is %.0f, expected %.0f-%.0f: the scan is "
-                               "probably not intensity-normalised to the template" % (p90, lo, hi))
-            log.warning("%s: %s", scan.id, info["warning"])
+            _warn(info, scan.id, "intensity p90 in the reference box is %.0f, expected %.0f-%.0f: the scan is "
+                                 "probably not intensity-normalised to the template" % (p90, lo, hi))
         labels_mnc = work / (stem + ".mnc")
         segment.segment_stx(t1, labels_mnc, args.model, model, work, device)
         counts = _count_labels(labels_mnc)
@@ -178,16 +194,19 @@ def process_scan(scan, args, model, device, outdir, work_root):
         if not args.keep_work:
             shutil.rmtree(work, ignore_errors=True)
     row = volumes.summarise(counts, args.model)
-    if info.get("scale_factor"):
-        for key in [k for k in row if k.endswith("_mm3")]:
-            row[key + "_native"] = row[key] / info["scale_factor"]
+    note = check_labels(counts, args.model, seg_path)  # raises when a whole structure is empty
+    if note:
+        _warn(info, scan.id, note)
+    volumes.add_native(row, info.get("scale_factor"))
+    if info.get("scale_factor") is None:
+        info["native_volumes"] = volumes.NO_TRANSFORM
+        _warn(info, scan.id, "native volumes %s; give the native -> stx xfm next to the input "
+                             "(stx2_<id>_t1.xfm) or in the 'xfm' column of --csv" % volumes.NO_TRANSFORM)
+    else:
+        info["native_volumes"] = "computed"
     info["seconds"] = round(time.time() - started, 1)
     info.setdefault("outputs", [str(seg_path)])
     info["output_format"] = out_fmt
-    note = check_labels(counts, args.model, seg_path)
-    if note:
-        info["warning"] = "; ".join(w for w in (info.get("warning"), note) if w)
-        log.warning("%s: %s", scan.id, note)
     return row, info
 
 
@@ -206,11 +225,18 @@ def check_labels(counts, model, seg_path):
 
 
 def write_volumes(path, rows):
+    """One row per scan. The columns are fixed by the model (`volumes.columns`),
+    not taken from the first row, so a failed first scan or a scan without
+    native volumes cannot drop columns from the others; cells left empty."""
     if not rows:
         return
-    # columns from every row: a failed scan's row has only the id columns
-    extra = dict.fromkeys(c for row in rows for c in row if c not in ID_COLUMNS)
-    columns = list(ID_COLUMNS) + list(extra)
+    models = {row.get("model") for row in rows} - {None, ""}
+    columns = list(ID_COLUMNS) + (volumes.columns(models.pop()) if len(models) == 1 else [])
+    seen = set(columns)
+    for row in rows:
+        extra = [c for c in row if c not in seen]
+        columns += extra
+        seen.update(extra)
     with open(str(path), "w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
         writer.writeheader()
@@ -255,10 +281,10 @@ def run(args, scans):
         for n, scan in enumerate(scans, 1):
             log.info("[%d/%d] %s", n, len(scans), scan.id)
             ident = {"id": scan.id, "subject": scan.subject, "session": scan.session,
-                     "group": scan.group, "model": args.model, "input_space": "stx"}
+                     "group": scan.group, "model": args.model, "input_space": args.input_space}
             try:
                 row, info = process_scan(scan, args, model, device, outdir, work_root)
-                row = dict(ident, status=info["status"], **row)
+                row = dict(ident, input_space=info["input_space"], status=info["status"], **row)
                 log.info("%s: %s | L HVR %s | R HVR %s | %ss", scan.id, info["status"],
                          _fmt(row["L_HVR"]), _fmt(row["R_HVR"]), info.get("seconds", "-"))
             except ScanError as exc:
@@ -284,6 +310,11 @@ def run(args, scans):
             tmp.cleanup()
         elif tmp is not None:
             log.info("intermediate files kept in %s", work_root)
+    no_native = sum(i.get("native_volumes") == volumes.NO_TRANSFORM for i in infos)
+    if no_native:
+        log.warning("native volumes %s for %d of %d scan(s) with results; their *_mm3_native and scale_factor "
+                    "cells are empty (see run.json)", volumes.NO_TRANSFORM, no_native,
+                    sum(i.get("status") in ("ok", "skipped") for i in infos))
     log.info("done: %d ok, %d failed, %d skipped -> %s", sum(i.get("status") == "ok" for i in infos), failed,
              sum(i.get("status") == "skipped" for i in infos), outdir)
     return failed

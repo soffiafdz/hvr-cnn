@@ -84,3 +84,45 @@ def test_moved_run_directory_still_checks(tmp_path):
     fake_run(tmp_path / "b")
     shutil.move(str(tmp_path / "b"), str(tmp_path / "b_moved"))  # run.json keeps the old paths
     assert failures(tmp_path / "a", tmp_path / "b_moved") == []
+
+
+def rename_to_rc(outdir):
+    """Rewrite a run's volumes.tsv with the 0.1.0-rc1/rc2 column names."""
+    import csv
+    path = outdir / "volumes.tsv"
+    with open(str(path), newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        rows = list(reader)
+    old = {k: k[: -len("_stx")] if k.endswith(("_mm3_stx", "_vox_stx")) else k for k in reader.fieldnames}
+    with open(str(path), "w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=[old[k] for k in reader.fieldnames], delimiter="\t")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({old[k]: v for k, v in row.items()})
+
+
+def test_reference_with_rc_column_names_is_still_compared(tmp_path):
+    fake_run(tmp_path / "a")
+    fake_run(tmp_path / "b")
+    rename_to_rc(tmp_path / "b")
+    msgs = [m for _, m in results(tmp_path / "a", tmp_path / "b")]
+    assert failures(tmp_path / "a", tmp_path / "b") == []
+    assert any("L_HC_mm3_stx" in m and "vs reference" in m for m in msgs)  # compared, not skipped
+
+
+def test_rc_reference_with_other_volumes_fails(tmp_path):
+    fake_run(tmp_path / "a")
+    fake_run(tmp_path / "b", labels=(11, 12, 21, 22, 11))  # a fifth band relabelled: larger L_HC
+    rename_to_rc(tmp_path / "b")
+    assert any("L_HC_mm3_stx" in m for m in failures(tmp_path / "a", tmp_path / "b"))
+
+
+def test_reference_missing_a_stereotaxic_column_fails(tmp_path):
+    fake_run(tmp_path / "a")
+    fake_run(tmp_path / "b")
+    path = tmp_path / "b" / "volumes.tsv"
+    lines = path.read_text().splitlines()
+    header = lines[0].split("\t")
+    keep = [i for i, c in enumerate(header) if c != "R_VC_mm3_stx"]
+    path.write_text("\n".join("\t".join(line.split("\t")[i] for i in keep) for line in lines) + "\n")
+    assert any("R_VC_mm3_stx not in the reference" in m for m in failures(tmp_path / "a", tmp_path / "b"))

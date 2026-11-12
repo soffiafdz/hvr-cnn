@@ -94,7 +94,8 @@ def build_parser():
                         help="T1w scans: .mnc, .mnc.gz, .nii or .nii.gz")
     source.add_argument("--csv", metavar="FILE",
                         help="CSV or TSV table with a header row: column 'input' (path, may be "
-                             "relative to the table), optional 'subject', 'session', 'group'")
+                             "relative to the table), optional 'subject', 'session', 'group', 'xfm' "
+                             "(native -> stx transform of a stereotaxic input, for native volumes)")
     inputs.add_argument("--input-space", default="auto",
                         choices=["auto", "stx", "native", "assemblynet"],
                         help="stx: already registered and intensity-normalised to ICBM152 2009c; "

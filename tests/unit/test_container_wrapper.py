@@ -66,6 +66,22 @@ def test_csv_inputs_are_mounted(tmp_path):
     assert "%s:%s:ro" % (tmp_path / "t", tmp_path / "t") in v                   # the table itself
 
 
+def test_csv_xfm_column_is_mounted(tmp_path):
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "scans.csv").write_text("input,xfm\nrel/s1.mnc,../xfm/s1.xfm\nrel/s2.mnc,\n")
+    cmd = printed(tmp_path, "run", "--csv", "t/scans.csv", "-o", "out",
+                  make=["t/rel/s1.mnc", "t/rel/s2.mnc", "xfm/s1.xfm"])
+    v = volumes(cmd, "--volume")
+    assert "%s:%s:ro" % (tmp_path / "xfm", tmp_path / "xfm") in v           # relative to the table
+
+
+def test_missing_csv_xfm_is_an_error(tmp_path):
+    (tmp_path / "s.mnc").touch()
+    (tmp_path / "scans.csv").write_text("input,xfm\ns.mnc,gone.xfm\n")
+    out = subprocess.run(["bash", str(WRAPPER), "--engine", "podman", "--print", "run", "--csv", "scans.csv",
+                          "-o", "o"], cwd=str(tmp_path), stderr=subprocess.PIPE, universal_newlines=True)
+    assert out.returncode == 2 and "gone.xfm" in out.stderr
+
 def test_tsv_with_bom(tmp_path):
     xy = tmp_path / "x" / "y"
     (tmp_path / "scans.tsv").write_bytes(("\ufeffinput\tsubject\n%s/s.mnc\ts\n" % xy).encode("utf-8"))

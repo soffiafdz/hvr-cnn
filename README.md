@@ -31,7 +31,7 @@ Python environment and no network access on the machine that runs it.
 | Input | one T1w scan or a table of scans; MINC (`.mnc`) or NIfTI (`.nii`, `.nii.gz`) |
 | Accepted spaces | already stereotaxic (ICBM152 2009c, intensity-normalised), raw / native, or AssemblyNet `mni_t1` output |
 | Models | `simple`: left/right hippocampus and temporal horn. `detailed`: head, body and tail of both, plus amygdala |
-| Output | label volumes in the format of the input, `volumes.tsv` (volumes and HVR per hemisphere), a QC picture per scan (on by default), `run.json` (provenance, per-scan status) |
+| Output | label volumes in the format of the input, `volumes.tsv` (stereotaxic and native volumes, HVR per hemisphere), a QC picture per scan (on by default), `run.json` (provenance, per-scan status) |
 | Hardware | CPU, or an NVIDIA GPU with the `-cuda` image. Per scan on CPU, measured with the default model and QC: about 2 minutes for an already-stereotaxic scan and 6 for a raw scan (preprocessing included) on a 12-core Linux machine; about 3 and 13 on an Apple-silicon Mac with 6 CPUs given to the Podman VM. With a GPU (RTX 3070), about 15-20 seconds for an already-stereotaxic scan; raw scans gain less, as their preprocessing runs on CPU |
 | Runtimes | Docker, Podman, Apptainer / Singularity (HPC) |
 
@@ -91,6 +91,14 @@ If you use hvr-cnn, please cite:
 
 The analysis code of the paper lives in
 [soffiafdz/hvr_validation](https://github.com/soffiafdz/hvr_validation).
+
+For head-size adjustment, sex differences and the UK Biobank normative
+centiles:
+
+> Fernandez-Lozano S, Collins DL. Hippocampal-to-Ventricle Ratio as a
+> Head-Size-Independent Biomarker: Sex Differences and Cognitive
+> Associations in 27,680 UK Biobank Participants. *bioRxiv* 2026.
+> https://doi.org/10.64898/2026.04.13.718285
 
 ## Licence
 
