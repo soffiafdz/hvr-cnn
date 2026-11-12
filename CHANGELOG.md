@@ -4,7 +4,7 @@ Changes to hvr-cnn's commands and outputs. Version 0.0.x, the container of
 the Human Brain Mapping 2025 paper, is described in the user guide, section
 11.
 
-## Unreleased (0.1.0-rc3)
+## 0.1.0-rc3
 
 ### Changed
 
