@@ -14,17 +14,15 @@ hippocampal volume alone (see [Citing](#citing)).
 hvr-cnn is distributed as a container image. It needs no MINC toolkit, no
 Python environment and no network access on the machine that runs it.
 
-> **Status: release candidate `0.1.0-rc3`, being tested.** This repository
-> is the rewrite of the container published with the paper
-> (`soffiafdz/hvr_cnn` 0.0.x on Docker Hub). On stereotaxic input it
-> reproduces the published container's segmentations exactly. The rc3 images
-> (`ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc3` and `:0.1.0-rc3-cuda`) are not
-> published yet; until they are, use `0.1.0-rc2` (what changed:
-> [CHANGELOG.md](CHANGELOG.md)). rc2 is tested with Podman on Linux and on
-> macOS (Apple silicon, emulated), and its GPU variant with Podman and
-> Singularity on NVIDIA GPUs, where it gives the same labels as the CPU
-> image. Neither is tested on a cluster yet. Until 0.1.0 is released, use
-> the published 0.0.2 image for results you intend to publish.
+> **Status: release candidate `0.1.0-rc3`** (what changed:
+> [CHANGELOG.md](CHANGELOG.md)). This repository is the rewrite of the
+> container published with the paper (`soffiafdz/hvr_cnn` 0.0.x on Docker
+> Hub). On stereotaxic input it reproduces the published container's
+> segmentations exactly. The image `ghcr.io/soffiafdz/hvr-cnn:0.1.0-rc3` and
+> its GPU variant `:0.1.0-rc3-cuda` are tested with Podman on Linux; on an
+> NVIDIA GPU the `-cuda` image gives the same labels as the CPU image.
+> Neither is tested on a cluster yet. Until 0.1.0 is released, use the
+> published 0.0.2 image for results you intend to publish.
 
 ## What it does
 
