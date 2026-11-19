@@ -12,7 +12,9 @@ run() {  # run <args...> with fixtures, out (and ref) mounted at the same paths
             ${ref:+-B "$ref":"$ref":ro} "$image" "$@"
     else
         local engine=podman; command -v podman >/dev/null || engine=docker
-        $engine run --rm --read-only --network none --user "$(id -u):$(id -g)" --tmpfs /tmp \
+        local userns=()  # rootless podman: your uid inside too, or the container cannot write to $out
+        if [[ $engine == podman ]]; then userns=(--userns=keep-id); fi
+        $engine run --rm --read-only --network none ${userns[@]+"${userns[@]}"} --user "$(id -u):$(id -g)" --tmpfs /tmp \
             -v "$fixtures":"$fixtures":ro -v "$out":"$out" ${ref:+-v "$ref":"$ref":ro} "$image" "$@"
     fi
 }
